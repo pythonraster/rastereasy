@@ -1,0 +1,7 @@
+rasterio
+geopandas
+POT>=0.9.5
+scikit-learn
+matplotlib
+ipywidgets
+ipympl
