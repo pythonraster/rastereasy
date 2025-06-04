@@ -1,0 +1,26 @@
+[tool.setuptools]
+packages = { find = { where = ["src"] } }
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rastereasy"
+authors = [{name = "Thomas Corpetti", email = "thomas.corpetti@gmail.com"}]
+description = "A library to ease the manipulation of geospatial images"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.7"
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+dependencies = [
+    "rasterio",
+    "geopandas",
+    "POT>=0.9.5",
+    "scikit-learn",
+    "matplotlib",
+    "ipywidgets",
+    "ipympl",
+]
+[project.urls]
+Homepage = "https://github.com/pypa/sampleproject"

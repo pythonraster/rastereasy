@@ -1,0 +1,115 @@
+
+
+
+
+Introduction
+============
+
+**rastereasy** is a Python library for simple manipulation of georeferenced images (`*.tif`, `*.jp2`, `*.shp`, ...). The goal is to simplify geospatial workflows by offering tools for reading and processing raster and vector files, resampling, cropping, reprojecting, stacking, etc of raster images, easy visualizations such as color composites and spectral plots, use (train / apply) some classical Machine Learning algorithms on images, provide some tools for late fusion of classifications (Dempster-Shafer), ...
+
+The main class, `Geoimage`, enables to process raster similarly than numpy arrays while keeping and adapting all meta data.
+
+**Documentation**
+
+A complete documentation can be found [here](https://rastereasy.github.io/)
+
+
+**Example Usage**
+
+Here's a quick example of what you can do with rastereasy:
+
+```python
+ import rastereasy
+
+ # Load a georeferenced image
+ image = rastereasy.Geoimage("example.tif")
+
+ # Get image information
+ image.info()
+
+ # Print value of pixel [100,200]
+ print(image[100,200])
+
+ # Create a color composite
+ image.colorcomp(['4', '3', '2'])
+
+ # Resample and reproject
+ image_resampled = image.resampling(2)
+ image_reproject = image.reproject("EPSG:4326")
+
+ # Save the processed image
+ image.save("processed_image.tif")
+
+
+```
+# Installation
+
+####  With pip
+
+Install **rastereasy** via `pip` (the easiest method):
+
+```shell
+ $ pip install rastereasy
+```
+
+#### From source
+
+To install rastereasy from source:
+
+1. Clone the repository from GitHub:
+```shell
+$ git clone https://github.com/pythonraster/rastereasy.git
+```
+2. Navigate to the repository's root directory:
+```shell
+$ cd rastereasy
+```
+3. Install the package using pip:
+```shell
+$ pip install .
+```
+
+# Interactive Visualization Notes
+ ![Spectra visualization](./illus/spectra.png "Spectra visualization")
+
+As illustrated, **rastereasy** supports interactive plotting of spectral bands for individual pixels. To enable this functionality in Jupyter Notebook, rastereasy installs some Jupyter extensions in your environment. You then need to rebuild jupyter by the command:
+
+```
+jupyter lab build
+```
+
+
+ <!--
+1. Install the required Jupyter extensions: --
+ ```
+pip install ipympl
+```
+
+2. Rebuild JupyterLab:
+```
+jupyter lab build
+``` -->
+------
+
+# To do
+
+Check conda installation
+
+Authors
+=======
+- [Thomas Corpetti](https://tcorpetti.github.io/)
+- Pierrick Matelot
+- Augustin de la Brosse
+- [Candide Lissak](https://clissak.github.io/)
+
+Citation
+=======
+If you use rastereasy, please cite:
+
+Thomas Corpetti, Pierrick Matelot, Augustin de la Brosse, Candide Lissak
+Rastereasy: A Python package for an easy manipulation of remote sensing images
+Journal of Open Source Software, submitted, 2025.
+
+
+## License
+This project is licensed under the MIT License – see the [LICENCE](LICENCE) file for details.
