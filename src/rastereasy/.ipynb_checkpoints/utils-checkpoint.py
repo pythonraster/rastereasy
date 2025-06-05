@@ -23,6 +23,10 @@ import matplotlib
 from matplotlib.widgets import Button
 import ipywidgets as widgets
 import warnings
+def is_notebook_2():
+    """Detects if the code is running in a Jupyter notebook."""
+    ipython = get_ipython()
+    return ipython is not None and 'IPKernelApp' in ipython.config
 if os.environ.get('DISPLAY', '') == '':
     # Utilise 'agg' si aucune interface graphique n'est détectée
     matplotlib.use('agg')
@@ -1142,20 +1146,15 @@ def extract_colorcomp(im_input, bands=None, percentile=2):
     return im
 
 
-
 def reset_matplotlib(mode='inline'):
-    plt.close('all')  
-    #plt.clf()        
-
+    plt.close('all')  # Close all open figures
+    plt.clf()        # Clear the current figure (optional, since we are closing all)
     ipython = get_ipython()
-    if ipython is not None:
-        try:
-            ipython.run_line_magic('matplotlib', mode)
-        except Exception as e:
-            print(f"Warning: Impossible to run run_line_magic : {e}")
+    ipython.run_line_magic('matplotlib', mode)
 
 
 
+# Function to detect if the code is running in a notebook
 def is_notebook():
     try:
         from IPython import get_ipython
@@ -1173,21 +1172,25 @@ def plot_clic_spectra(im, imc, figsize=(15, 5), plot_legend=False, names=None,
     else:
         plt.ion()  # Interactive mode for the standard shell
 
-    plt.close('all')
+    plt.close('all')  # Close any open figures
 
+    # Initialize lists to store collected data
     series_spectrales = []
     val_i = []
     val_j = []
 
+    # Create a new figure with two subplots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
     fig.suptitle("")
     ax1.imshow(imc)
     ax1.set_title(title_im)
 
+    # Positioning the Finish button in the top-left corner
     close_button = Button(plt.axes([0.04, 0.92, 0.1, 0.05]), 'Finish')  # Adjusted position for top-left
     global end_collect
     end_collect = False
 
+    # Function to close the figure and disconnect the events
     def close_figure(event=None):
         fig.canvas.mpl_disconnect(cid)
         plt.close(fig)
@@ -1199,6 +1202,7 @@ def plot_clic_spectra(im, imc, figsize=(15, 5), plot_legend=False, names=None,
         reset_matplotlib()
     close_button.on_clicked(close_figure)
 
+    # Function to handle clicks
     def onclick(event):
         # If the click is outside the image, stop collecting data
         if event.inaxes != ax1:

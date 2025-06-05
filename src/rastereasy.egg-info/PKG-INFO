@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: rastereasy
-Version: 0.1.0
+Version: 0.1.1
 Summary: A library to ease the manipulation of geospatial images
 Author-email: Thomas Corpetti <thomas.corpetti@gmail.com>
 License-Expression: MIT
@@ -15,6 +15,7 @@ Requires-Dist: scikit-learn
 Requires-Dist: matplotlib
 Requires-Dist: ipywidgets
 Requires-Dist: ipympl
+Requires-Dist: nodejs
 Dynamic: license-file
 
 
@@ -91,7 +92,7 @@ $ pip install .
 # Interactive Visualization Notes
  ![Spectra visualization](./illus/spectra.png "Spectra visualization")
 
-As illustrated, **rastereasy** supports interactive plotting of spectral bands for individual pixels. To enable this functionality in Jupyter Notebook, rastereasy installs some Jupyter extensions in your environment. You then need to rebuild jupyter by the command:
+As illustrated, **rastereasy** supports interactive plotting of spectral bands for individual pixels. To enable this functionality in Jupyter Notebook, rastereasy installs some Jupyter extensions in your environment. If it doesn't work, you may need to rebuild jupyter by the command:
 
 ```
 jupyter lab build

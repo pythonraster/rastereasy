@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 name = "rastereasy"
 authors = [{name = "Thomas Corpetti", email = "thomas.corpetti@gmail.com"}]
 description = "A library to ease the manipulation of geospatial images"
-version = "0.1.0"
+version = "0.1.1"
 readme = "README.md"
 requires-python = ">=3.7"
 license = "MIT"
@@ -21,6 +21,7 @@ dependencies = [
     "matplotlib",
     "ipywidgets",
     "ipympl",
+    "nodejs"
 ]
 [project.urls]
 Homepage = "https://github.com/pypa/sampleproject"

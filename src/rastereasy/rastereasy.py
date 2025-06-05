@@ -33,7 +33,6 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_webagg_core import NavigationToolbar2WebAgg
 import matplotlib
-import ot  # Optimal transport library
 
 # Rasterio and geospatial imports
 import rasterio as rio
@@ -1430,6 +1429,8 @@ class InferenceTools:
         >>> adapted_gaussian = InferenceTools.adapt(source_image, target_image, mapping='gaussian')
         >>> adapted_emd = InferenceTools.adapt(source_image, target_image, mapping='emd')
         """
+        import ot  # Optimal transport library
+
         rng = np.random.RandomState(RANDOM_STATE)
 
         try:
@@ -2007,7 +2008,7 @@ def colorcomp(image, bands, name_save='', names=None, percentile=2, channel_firs
         ax.imshow(im, interpolation='nearest', extent=extent)
 
     plt.show()
-    plt.close(fig)
+    #plt.close(fig)
 
 class Geoimage:
     """
@@ -4356,6 +4357,7 @@ class Geoimage:
                       channel_first=True, meta=self.__meta,
                       fig_size=fig_size, title=title, extent=extent)
 
+
     def convert_3bands(self, bands=None, dest_name=None, percentile=2, reformat_names=False):
         """
         Convert an image to a 3-band 8-bit RGB composite.
@@ -5839,7 +5841,7 @@ class Geoimage:
         -------
         Geoimage
             The image containing only the extracted regions or None if `inplace = True`
-  
+
         Examples
         --------
         >>> # Extract only forest areas (assuming forest has code 3 in the shapefile)
@@ -7107,7 +7109,7 @@ class Geoimage:
         Returns
         -------
         Geoimage
-            A copy of the cropped image or None if `inplace=True` 
+            A copy of the cropped image or None if `inplace=True`
 
         Examples
         --------

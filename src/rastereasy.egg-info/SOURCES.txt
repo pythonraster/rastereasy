@@ -4,9 +4,9 @@ environment_rastereasy.yml
 pyproject.toml
 illus/spectra.png
 joos_paper/.DS_Store
-joos_paper/article.md
 joos_paper/illustrations.pdf
 joos_paper/paper.bib
+joos_paper/paper.md
 src/.DS_Store
 src/rastereasy/__init__.py
 src/rastereasy/rastereasy.py

@@ -72,7 +72,7 @@ $ pip install .
 # Interactive Visualization Notes
  ![Spectra visualization](./illus/spectra.png "Spectra visualization")
 
-As illustrated, **rastereasy** supports interactive plotting of spectral bands for individual pixels. To enable this functionality in Jupyter Notebook, rastereasy installs some Jupyter extensions in your environment. You then need to rebuild jupyter by the command:
+As illustrated, **rastereasy** supports interactive plotting of spectral bands for individual pixels. To enable this functionality in Jupyter Notebook, rastereasy installs some Jupyter extensions in your environment. If it doesn't work, you may need to rebuild jupyter by the command:
 
 ```
 jupyter lab build
