@@ -219,5 +219,9 @@ A complete documentation is available at : with many notebooks for examples.
 
 The source code is available here : https://github.com/pythonraster/rastereasy
 
+# Acknowledgments
+
+This library is partly supported by the [ANR MONI-TREE](https://moni-tree.github.io/) project (ANR-23-CE04-0017)
+
 
 # References
