@@ -8,6 +8,8 @@ joos_paper/illustrations.pdf
 joos_paper/paper.bib
 joos_paper/paper.md
 src/.DS_Store
+src/rastereasy/.DS_Store
+src/rastereasy/Untitled.ipynb
 src/rastereasy/__init__.py
 src/rastereasy/rastereasy.py
 src/rastereasy/utils.py
@@ -16,4 +18,8 @@ src/rastereasy.egg-info/SOURCES.txt
 src/rastereasy.egg-info/dependency_links.txt
 src/rastereasy.egg-info/requires.txt
 src/rastereasy.egg-info/top_level.txt
+src/rastereasy/.ipynb_checkpoints/Untitled-checkpoint.ipynb
 src/rastereasy/.ipynb_checkpoints/rastereasy-checkpoint.py
+src/rastereasy/.ipynb_checkpoints/utils-checkpoint.py
+src/rastereasy/__pycache__/rastereasy.cpython-311.pyc
+src/rastereasy/__pycache__/utils.cpython-311.pyc

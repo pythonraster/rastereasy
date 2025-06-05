@@ -15,7 +15,6 @@ Requires-Dist: scikit-learn
 Requires-Dist: matplotlib
 Requires-Dist: ipywidgets
 Requires-Dist: ipympl
-Requires-Dist: nodejs
 Dynamic: license-file
 
 
