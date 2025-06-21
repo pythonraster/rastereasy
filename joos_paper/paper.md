@@ -18,7 +18,7 @@ authors:
      corresponding: true
      affiliation: 1
 
-  -  name: Pierrick Matelot
+  -  name: Pierrick Matelot 
      affiliation: 2
 
   -  name: Augustin de la Brosse
