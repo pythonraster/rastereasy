@@ -1,43 +1,36 @@
-
-----------
-
+---
 title: 'Rastereasy: A Python package for an easy manipulation of remote sensing images'
-
 tags:
-
--   Python
--   Remote sensing
--   Geospatial analysis
--   Image processing
--   GIS
-
+- Python
+- Remote sensing
+- Geospatial analysis
+- Image processing
+- GIS
 
 authors:
-  -  name: Thomas Corpetti
-     orcid:  0000-0002-0257-138X
-     corresponding: true
-     affiliation: 1
-
-  -  name: Pierrick Matelot 
-     affiliation: 2
-
-  -  name: Augustin de la Brosse
-     affiliation: 1
-
-  -  name: Candide Lissak
-     affiliation: 2
-     orcid:  0000-0003-3393-7767
+- name: Thomas Corpetti
+  orcid: 0000-0002-0257-138X
+  corresponding: true
+  affiliation: 1
+- name: Pierrick Matelot
+  # orcid: XXXX-XXXX-XXXX-XXXX # Recommandé d'ajouter l'ORCID
+  affiliation: 2
+- name: Augustin de la Brosse
+  # orcid: XXXX-XXXX-XXXX-XXXX # Recommandé d'ajouter l'ORCID
+  affiliation: 1
+- name: Candide Lissak
+  orcid: 0000-0003-3393-7767
+  affiliation: 2
 
 affiliations:
-  -  name: CNRS, UMR 6554 LETG, Univ. Rennes 2, Place du Recteur Henri Le Moal, 35043 Rennes Cedex, France
-     index: 1
-  - name: Université de Rennes, Inserm, Irset, UMR_S 1085
-     index: 2
+- name: 'CNRS, UMR 6554 LETG, Univ. Rennes 2, Place du Recteur Henri Le Moal, 35043 Rennes Cedex, France'
+  index: 1
+- name: 'Université de Rennes, Inserm, Irset, UMR_S 1085'
+  index: 2
 
 date: 03 June 2025
 bibliography: paper.bib
-
-----------
+---
 
 # Summary
 
