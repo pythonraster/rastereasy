@@ -6,7 +6,6 @@ tags:
 - Geospatial analysis
 - Image processing
 - GIS
-
 authors:
 - name: Thomas Corpetti
   orcid: 0000-0002-0257-138X
@@ -21,18 +20,14 @@ authors:
 - name: Candide Lissak
   orcid: 0000-0003-3393-7767
   affiliation: 2
-
 affiliations:
 - name: 'CNRS, UMR 6554 LETG, Univ. Rennes 2, Place du Recteur Henri Le Moal, 35043 Rennes Cedex, France'
   index: 1
 - name: 'Université de Rennes, Inserm, Irset, UMR_S 1085'
   index: 2
-
 date: 03 June 2025
 bibliography: paper.bib
 ---
-
-
 # Summary
 
 The analysis and processing of remote sensing images have many important applications in various fields such as environmental monitoring, urban planning, or even agriculture. However, handling large georeferenced raster datasets can be challenging due to their complexity and size.
