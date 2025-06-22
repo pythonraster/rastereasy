@@ -1,33 +1,33 @@
 ---
-title: 'Rastereasy: A Python package for an easy manipulation of remote sensing images'
+title: "Rastereasy: A Python package for an easy manipulation of remote sensing images"
 tags:
-- Python
-- Remote sensing
-- Geospatial analysis
-- Image processing
-- GIS
+  - Python
+  - Remote sensing
+  - Geospatial analysis
+  - Image processing
+  - GIS
 authors:
-- name: Thomas Corpetti
-  orcid: 0000-0002-0257-138X
-  corresponding: true
-  affiliation: 1
-- name: Pierrick Matelot
-  orcid: 0000-0002-3932-0158
-  affiliation: 2
-- name: Augustin de la Brosse
-  orcid: 0000-0001-9793-9095
-  affiliation: 1
-- name: Candide Lissak
-  orcid: 0000-0003-3393-7767
-  affiliation: 2
+  - name: Thomas Corpetti
+    orcid: 0000-0002-0257-138X
+    corresponding: true
+    affiliation: 1
+  - name: Pierrick Matelot
+    affiliation: 2
+  - name: Augustin de la Brosse
+    affiliation: 1
+  - name: Candide Lissak
+    orcid: 0000-0003-3393-7767
+    affiliation: 2
 affiliations:
-- name: 'CNRS, UMR 6554 LETG, Univ. Rennes 2, Place du Recteur Henri Le Moal, 35043 Rennes Cedex, France'
-  index: 1
-- name: 'Université de Rennes, Inserm, Irset, UMR_S 1085'
-  index: 2
+  - name: "CNRS, UMR 6554 LETG, Univ. Rennes 2, Place du Recteur Henri Le Moal, 35043 Rennes Cedex, France"
+    index: 1
+  - name: "Université de Rennes, Inserm, Irset, UMR_S 1085"
+    index: 2
 date: 03 June 2025
 bibliography: paper.bib
+pandoc-version: 2.17.1.1
 ---
+
 # Summary
 
 The analysis and processing of remote sensing images have many important applications in various fields such as environmental monitoring, urban planning, or even agriculture. However, handling large georeferenced raster datasets can be challenging due to their complexity and size.
@@ -62,7 +62,7 @@ Many existing remote sensing libraries, such as `rasterio` and `gdal` [@garrard2
 The package is designed for researchers and practitioners in remote sensing who need efficient tools for image preprocessing and analysis. It integrates seamlessly with `rasterio` and `numpy`, making it compatible with existing geospatial workflows.
 
 # Example of use
-In rastereasy, the core class of the library is **GeoImage**. This class allows users to manipulate a satellite image as a `numpy` array while preserving essential geospatial information, such as georeferencing, spectral bands, and projection system. This makes it easy to perform calculations on the data while maintaining its spatial consistency.
+In rastereasy, the core class of the library is **Geoimage**. This class allows users to manipulate a satellite image as a `numpy` array while preserving essential geospatial information, such as georeferencing, spectral bands, and projection system. This makes it easy to perform calculations on the data while maintaining its spatial consistency.
 
 For example, applying a simple transformation, extracting spectral bands, performing operations or modifying an image is straightforward:
 Here's a quick example of what you can do with rastereasy:
@@ -130,7 +130,7 @@ import rastereasy
 
 # Load a satellite image and give specific names
 name_bands = {"NIR":8,"G":3,"CO" : 1,"SWIR2":11,"B": 2,"R":4,"RE1":5,"RE2":6,"RE3":7,"WA":9,"SWIR1":10,"SWIR3":12}
-img = GeoImage("satellite_image.tif",names=name_bands)
+img = Geoimage("satellite_image.tif",names=name_bands)
 
 # select red and near-infrared bands
 r=img.select_bands('R')
