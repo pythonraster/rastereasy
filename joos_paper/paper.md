@@ -32,6 +32,7 @@ date: 03 June 2025
 bibliography: paper.bib
 ---
 
+
 # Summary
 
 The analysis and processing of remote sensing images have many important applications in various fields such as environmental monitoring, urban planning, or even agriculture. However, handling large georeferenced raster datasets can be challenging due to their complexity and size.
