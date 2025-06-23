@@ -130,7 +130,9 @@ In one prefers to deal with explicit names for spectral bands, this is easily do
 import rastereasy
 
 # Load a satellite image and give specific names
-name_bands = {"NIR":8,"G":3,"CO" : 1,"SWIR2":11,"B": 2,"R":4,"RE1":5,"RE2":6,"RE3":7,"WA":9,"SWIR1":10,"SWIR3":12}
+name_bands = {"NIR":8,"G":3,"CO" : 1,"SWIR2":11,"B": 2,
+              "R":4,"RE1":5,"RE2":6,"RE3":7,"WA":9,
+              "SWIR1":10,"SWIR3":12}
 img = Geoimage("satellite_image.tif",names=name_bands)
 
 # select red and near-infrared bands
