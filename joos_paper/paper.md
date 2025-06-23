@@ -174,7 +174,9 @@ image.colorcomp([4,3,2])
 # Visualization of histograms
 image.hist(superpose=True)
 ```
-This gives the following images: ![Spectra](./illustrations.pdf "example of images")
+This gives the following images:
+
+![Spectra](./illustrations2.jpg "example of images")
 
 ## Harmonization
 
