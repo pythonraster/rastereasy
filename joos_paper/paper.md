@@ -40,7 +40,7 @@ Compared to traditional RGB image manipulation, satellite images are highly spec
 
 **rastereasy** is designed to simplify these processes, providing an easy-to-use interface for standard operations on multispectral and georeferenced images. It is particularly aimed at users who are experienced in data processing but not necessarily in geospatial analysis, while also streamlining workflows for geographers by leveraging `rasterio` and other geospatial libraries. It is particularly useful, among other things, for preparing sample data for deep neural networks.
 
-The source code is available  at [https://easy-raster.github.io/](https://easy-raster.github.io/) and a documentation [here](https://github.com/pythonraster/rastereasy/).
+The source code is available  at [https://github.com/pythonraster/rastereasy](https://github.com/pythonraster/rastereasy) and a documentation [https://rastereasy.github.io/](https://rastereasy.github.io/).
 
 # Statement of need
 
@@ -176,7 +176,7 @@ image.hist(superpose=True)
 ```
 This gives the following images:
 
-![Spectra](./illustrations2.jpg "example of images")
+![Examples of visualizations provided by rastereasy. Complete examples can be seen on the rastereasy package documentation : [https://rastereasy.github.io/](https://rastereasy.github.io/)](./illustrations2.jpg "example of images")
 
 ## Harmonization
 
