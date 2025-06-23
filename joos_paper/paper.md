@@ -209,9 +209,9 @@ image1.adapt(image2, mapping='sinkhorn', inplace=True)
 
 `rastereasy` leverages `numpy` for efficient numerical operations and `rasterio` for optimized I/O operations, ensuring scalability for large datasets. Parallel processing capabilities are planned for future releases.
 
-A complete documentation is available at : with many notebooks for examples.
+A complete documentation is available at [https://rastereasy.github.io/](https://rastereasy.github.io/)  with many notebooks for examples.
 
-The source code is available here : https://github.com/pythonraster/rastereasy
+The source code is available here : [https://github.com/pythonraster/rastereasy](https://github.com/pythonraster/rastereasy)
 
 # Acknowledgments
 
