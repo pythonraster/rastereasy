@@ -12,10 +12,8 @@ authors:
   corresponding: true
   affiliation: 1
 - name: Pierrick Matelot
-  orcid: 0000-0002-3932-0158
   affiliation: 2
 - name: Augustin de la Brosse
-  orcid: 0000-0001-9793-9095
   affiliation: 1
 - name: Candide Lissak
   orcid: 0000-0003-3393-7767
