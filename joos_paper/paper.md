@@ -169,6 +169,7 @@ ims_to_imt.hist(superpose=True,title='Histogram transported source data')
 ```
 
 Here are  the generated images:
+
 ![Examples of band harmonization with  rastereasy](./harmonization.jpg "harmonization of bands")
 
 
