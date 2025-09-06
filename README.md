@@ -78,6 +78,12 @@ As illustrated, **rastereasy** supports interactive plotting of spectral bands f
 jupyter lab build
 ```
 
+With google colab, you must activate matplotlib widgets :
+
+```
+%matplotlib widget
+```
+
 
  <!--
 1. Install the required Jupyter extensions: --
