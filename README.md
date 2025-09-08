@@ -72,16 +72,41 @@ $ pip install .
 # Interactive Visualization Notes
  ![Spectra visualization](./illus/spectra.png "Spectra visualization")
 
+## Jupyter notebooks
+
 As illustrated, **rastereasy** supports interactive plotting of spectral bands for individual pixels. To enable this functionality in Jupyter Notebook, rastereasy installs some Jupyter extensions in your environment. If it doesn't work, you may need to rebuild jupyter by the command:
 
 ```
 jupyter lab build
 ```
 
-With google colab, you must activate matplotlib widgets :
+## Google Colab
+
+To use the interactive plotting features in Google Colab, a special two-step setup is required.Follow these steps in the exact order. Separating the commands into different cells and restarting the session is **essential**.
+
+### Step 1: Install Libraries
+
+Run the following cell to install rastereasy and the necessary dependencies for interactive widgets.
+
+```
+!pip install rastereasy ipympl
+from google.colab import output
+output.enable_custom_widget_manager()
+```
+
+### Step 2: Restart the Runtime
+
+After the installation is complete, you must restart the runtime.
+
+Go to the menu: `Runtime > Restart` runtime (or use the shortcut Ctrl+M).
+
+### Step 3: Run Your Code
+
+After restarting, you can now enable the interactive mode and use the library in a new cell.
 
 ```
 %matplotlib widget
+import rastereasy
 ```
 
 
