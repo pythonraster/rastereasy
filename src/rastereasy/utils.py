@@ -26,6 +26,8 @@ import warnings
 if os.environ.get('DISPLAY', '') == '':
     # Utilise 'agg' si aucune interface graphique n'est détectée
     matplotlib.use('agg')
+
+from scipy import ndimage, signal
 #else:
     # Utilise 'tkagg' pour un affichage interactif standard
 #    matplotlib.use('tkagg')
@@ -1369,3 +1371,57 @@ def fusion_multisource(*args):
         fusion, conflit = fusion_2classes(fusion, args[i])
 
     return fusion, conflit
+
+def apply_filter2(image, kernel):
+    if len(image.shape) == 3:
+        result = np.zeros_like(image)
+        for i in range(image.shape[2]):
+            result[:, :, i] = ndimage.convolve(image[:, :, i], kernel)
+        return result
+    else:
+        # Si l'image est en niveaux de gris
+        return ndimage.convolve(image, kernel)
+
+def apply_filter(image, kernel, method="auto"):
+    """
+    Apply a 2D filter to an image (multi-band or single-band).
+    
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Input image (2D or 3D with channels last).
+    kernel : numpy.ndarray
+        2D filter kernel.
+    method : str, optional
+        'auto' (default): use direct convolution for small kernels, FFT for large.
+        'direct': always use ndimage.convolve.
+        'fft': always use signal.fftconvolve.
+    
+    Returns
+    -------
+    numpy.ndarray
+        Filtered image, same shape as input.
+    """
+    
+    def _filter_band(band, kernel, method):
+        if method == "direct":
+#            return ndimage.convolve(band, kernel, mode="reflect")
+            return ndimage.convolve(band, kernel)
+        elif method == "fft":
+#            return signal.fftconvolve(band, kernel, mode="same")
+            return signal.fftconvolve(band, kernel)
+        else:  # auto
+            if kernel.shape[0] * kernel.shape[1] <= 225:  # e.g. 15x15
+#                return ndimage.convolve(band, kernel, mode="reflect")
+                return ndimage.convolve(band, kernel)
+            else:
+#                return signal.fftconvolve(band, kernel, mode="same")
+                return signal.fftconvolve(band, kernel)
+
+    if image.ndim == 3:
+        result = np.zeros_like(image)
+        for i in range(image.shape[2]):
+            result[:, :, i] = _filter_band(image[:, :, i], kernel, method)
+        return result
+    else:
+        return _filter_band(image, kernel, method)

@@ -48,7 +48,12 @@ import geopandas as gpd
 
 # Local imports with relative path
 from .utils import *
-
+from scipy.ndimage import (
+    gaussian_filter,
+    median_filter,
+    laplace,
+    sobel
+)
 # Configure warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 # Configure matplotlib backend based on environment
@@ -1738,11 +1743,13 @@ def extract_common_areas(im1, im2, resolution='min', projection=None):
     lat2_d, lon2_d = im2.pixel2latlon(0, 0)
     lat2_e, lon2_e = im2.pixel2latlon(im2.shape[0], im2.shape[1])
 
+
     # Calculate boundaries of overlapping area
     bound_lat_d = min(lat1_d, lat2_d)
     bound_lat_e = max(lat1_e, lat2_e)
     bound_lon_d = max(lon1_d, lon2_d)
     bound_lon_e = min(lon1_e, lon2_e)
+
 
     # Crop images to common bounds
     im1common = im1.crop(bound_lon_d, bound_lon_e, bound_lat_d, bound_lat_e, pixel=False)
@@ -5182,7 +5189,7 @@ class Geoimage:
         meta['dtype'] = str(image.dtype)
 
         # Create the new Geoimage
-        geoim = Geoimage(data=image, meta=meta, names=names, georef=self.__georef)
+        geoim = Geoimage(data=image, meta=meta, names=names, georef=self.__georef, history=self.__history)
 
         # Save if requested
         if dest_name is not None:
@@ -8952,3 +8959,223 @@ class Geoimage:
 
         except Exception as e:
             raise RuntimeError(f"Creating image with additional band failed: {str(e)}") from e
+            
+    def __generic_filter(self, kernel, inplace = False, dest_name=None):
+        """
+        Apply a generic 2D convolution filter to the spectral bands of the image.
+    
+        This method applies a user-defined kernel (2D array) to each spectral band 
+        of the image using convolution. It can be used, for example, to perform 
+        smoothing (mean filter), edge detection, or other custom spatial filtering 
+        operations.
+    
+        Parameters
+        ----------
+        kernel : numpy.ndarray
+            A 2D convolution kernel. Must be a square or rectangular matrix 
+            (e.g., a Gaussian blur kernel, Sobel operator, etc.).
+    
+        inplace : bool, default False
+            If False, returns a new Geoimage instance with the filtered data.
+            If True, modifies the current image in place.
+    
+        dest_name : str, optional
+            Path to save the filtered image. If None, the image is not saved.
+            Default is None.
+    
+        Returns
+        -------
+        Geoimage or None
+            A new Geoimage containing the filtered image if `inplace=False`.
+            Returns None if `inplace=True`.
+    
+        Raises
+        ------
+        ValueError
+            If the kernel dimensions are invalid or if the image data type 
+            is not supported.
+    
+        Examples
+        --------
+        >>> # Create an average filter of size 5
+        >>> blur_kernel = np.ones((5, 5)) / 25
+        >>> # Apply the filter and return a new Geoimage
+        >>> Image_filtered = Image.generic_filter(blur_kernel)
+        >>> # Apply the filter in place and save the result
+        >>> Image.generic_filter(blur_kernel, inplace=True, dest_name="im_filtered.tif")
+    
+        Notes
+        -----
+        - The kernel is applied independently to each spectral band.
+        - This function uses convolution; kernel normalization (e.g., sum to 1) 
+          is the responsibility of the user.
+        - For large images, filtering may require significant memory.
+        """
+        
+        blurred_image = apply_filter(self.numpy_channel_last().astype(np.float64), kernel)
+        if inplace:
+            self.upload_image(blurred_image,channel_first=False, inplace = True)
+            if dest_name is not None:
+                write_geoim(self.image, self.__meta, dest_name)
+
+            if self.__history is not False:
+                now = datetime.datetime.now()
+                now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+
+                self.__listhistory.append(
+                    f'[{now_str}] - Filtered image with generic kernel.'
+                )
+
+
+
+        
+        else:
+            imf = self.upload_image(blurred_image,channel_first=False, inplace = False)
+            if dest_name is not None:
+                imf.save(dest_name)
+            if imf.__history:
+                now = datetime.datetime.now()
+                now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+                imf.__listhistory.append(
+                    f'[{now_str}] - Filtered image with generic kernel.'
+                )
+
+            return imf
+
+    def filter(self, method="generic", kernel=None,
+               sigma=1, size=3, axis=-1, pre_smooth_sigma=None,
+               inplace=False, dest_name=None):
+        """
+        Apply a spatial filter to the Geoimage.
+
+        Parameters
+        ----------
+        method : str, default="generic"
+            Type of filter. Options:
+            - "generic" : Generic convolution with a kernel.
+            - "gaussian" : Gaussian filter.
+            - "median"   : Median filter.
+            - "sobel"    : Sobel edge detection (discrete operator).
+            - "laplace"  : Laplacian operator (discrete operator).
+            
+        kernel : numpy.ndarray, optional
+            Convolution kernel (required if mode="generic").
+            
+        sigma : float, default=1
+            Standard deviation for Gaussian filter (if mode="gaussian").
+            
+        size : int, default=3
+            Size of the filter window (for median).
+            
+        axis : int, default=-1
+            Axis along which to compute the Sobel filter (if mode="sobel").
+            It is 0 for x, 1 for y. If None, computes gradient magnitude.
+            
+        pre_smooth_sigma : float or None, default=None
+            If set (e.g., 1.0 or 2.0), a Gaussian filter is applied before Sobel or Laplace,
+            useful to reduce noise and simulate larger kernels.
+            
+        inplace : bool, default False
+            If False, returns a new Geoimage instance with the filtered data.
+            If True, modifies the current image in place.
+    
+        dest_name : str, optional
+            Path to save the filtered image. If None, the image is not saved.
+            Default is None.
+        
+        Returns
+        -------
+        Geoimage
+            A new filtered Geoimage if inplace=False, otherwise self.
+
+        Raises
+        ------
+        ValueError
+            If `method` is unknown.
+
+        Examples
+        --------
+        >>> # Create a gaussian with sigma = 8
+        >>> imf = image.filter("gaussian", sigma=8)
+        >>> # Create a median with size = 7
+        >>> imf = image.filter("median", size=7)
+        >>> # Create a sobel in x-axis 
+        >>> imf = image.filter("sobel", axis=0)
+        >>> # Create a sobel in y-axis 
+        >>> imf = image.filter("sobel", axis=1)
+        >>> # Create the norm of sobel
+        >>> imf = image.filter("sobel")
+        >>> # Create a sobel in x-axis with pre_smooth_sigma = 2
+        >>> imf = image.filter("sobel", axis=0, pre_smooth_sigma=2)
+        >>> # Create a sobel in y-axis with pre_smooth_sigma = 2
+        >>> imf = image.filter("sobel", axis=1, pre_smooth_sigma=2)
+        >>> # Create the norm of sobel with pre_smooth_sigma = 2
+        >>> imf = image.filter("sobel", pre_smooth_sigma=2))
+        >>> # Create a laplacian filter 
+        >>> imf = image.filter("laplace")
+        >>> # Create a laplacian filter pre_smooth_sigma = 2
+        >>> imf = image.filter("laplace", pre_smooth_sigma=2)
+
+        """
+        if method=='generic':
+            if inplace:
+                self.__generic_filter(kernel, inplace = True, dest_name=dest_name)
+            else:
+                return  self.__generic_filter(kernel, inplace = False, dest_name=dest_name)
+        else:
+            def _filter_band(band):
+                if method == "gaussian":
+                    return gaussian_filter(band.astype(np.float64), sigma=sigma)
+    
+                elif method == "median":
+                    return median_filter(band, size=size)
+    
+                elif method == "laplace":
+                    if pre_smooth_sigma is not None:
+                        band=gaussian_filter(band.astype(np.float64), sigma=pre_smooth_sigma)
+                    return laplace(band.astype(np.float64))
+    
+                elif method == "sobel":
+                    if pre_smooth_sigma is not None:
+                        band=gaussian_filter(band.astype(np.float64), sigma=pre_smooth_sigma)
+                    if axis is None:
+                        dx = sobel(band.astype(np.float64), axis=0)
+                        dy = sobel(band.astype(np.float64), axis=1)
+                        return np.hypot(dx, dy)
+                    else:
+                        return sobel(band.astype(np.float64), axis=axis)
+    
+                else:
+                    raise ValueError(f"Unknown filter method: {method}")
+    
+            arr = self.numpy_channel_last()
+
+
+            if arr.ndim == 2:
+                filtered = _filter_band(arr)
+            else:
+                filtered = np.stack([_filter_band(arr[:, :, b]) for b in range(arr.shape[2])], axis=2)
+    
+            if inplace:
+                self.upload_image(filtered, channel_first=False, inplace=True)
+                if dest_name:
+                    self.save(dest_name)
+                if self.__history is not False:
+                    now = datetime.datetime.now()
+                    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+    
+                    self.__listhistory.append(
+                        f'[{now_str}] - Filtered image with %s kernel.'%method
+                    )
+            else:
+                new_im = self.upload_image(filtered, channel_first=False, inplace=False)
+                if dest_name:
+                    new_im.save(dest_name)
+                if new_im.__history:
+                    now = datetime.datetime.now()
+                    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+                    new_im.__listhistory.append(
+                        f'[{now_str}] - Filtered image with %s kernel.'%method
+                    )
+                return new_im
+
