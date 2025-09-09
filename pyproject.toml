@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 name = "rastereasy"
 authors = [{name = "Thomas Corpetti", email = "thomas.corpetti@gmail.com"}]
 description = "A library to ease the manipulation of geospatial images"
-version = "0.1.2"
+version = "0.1.3"
 readme = "README.md"
 requires-python = ">=3.7"
 license = "MIT"

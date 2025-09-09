@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: rastereasy
-Version: 0.1.2
+Version: 0.1.3
 Summary: A library to ease the manipulation of geospatial images
 Author-email: Thomas Corpetti <thomas.corpetti@gmail.com>
 License-Expression: MIT
