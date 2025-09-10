@@ -666,6 +666,65 @@ def table2image(table, size, channel_first=True):
         image = table.reshape(size[0], size[1], bands)
         return image
 
+
+def extract_numpy_tables(data, outputs, label=None):
+    """
+    Extract paired NumPy tables (features and outputs) for machine learning.
+
+    This function converts raster data stored in `Geoimage` objects into two
+    NumPy arrays: one containing the input features (X), and one containing
+    the corresponding outputs/labels (y). Optionally, it can filter the
+    dataset to only include samples corresponding to one or multiple label
+    values.
+
+    Parameters
+    ----------
+    data : Geoimage
+        A `rastereasy.Geoimage` containing the input features
+        (e.g., multispectral bands).
+    outputs : Geoimage
+        A `rastereasy.Geoimage` containing the outputs/labels
+        (e.g., classes or quantitative values).
+    label : int or list of int, optional (default=None)
+        If provided, only the samples corresponding to this label value
+        (or list of values) in `outputs` will be extracted.
+
+    Returns
+    -------
+    X : numpy.ndarray
+        Input feature table of shape (N, f), where
+        N is the number of extracted samples and
+        f is the number of features (bands).
+    y : numpy.ndarray
+        Output array of shape (N, ), containing the labels/outputs
+        associated with each sample.
+
+    Examples
+    --------
+    >>> # Extract all data/labels from two Geoimages
+    >>> X, y = extract_numpy_tables(data, labels)
+
+    >>> # Extract only the samples where label == 1
+    >>> X, y = extract_numpy_tables(data, outputs, label=1)
+
+    >>> # Extract only the samples with labels in [1, 3, 5]
+    >>> X, y = extract_numpy_tables(data, outputs, label=[1, 3, 5])
+    """
+    data_np = data.numpy_table()
+    classes_np = outputs.numpy_table()
+
+    if label is None:
+        X = data_np
+        y = classes_np
+    else:
+        # Assure qu'on gère int et liste
+        labels = np.atleast_1d(label)
+        mask = np.isin(classes_np.flatten(), labels)
+        X = data_np[mask]
+        y = classes_np.flatten()[mask]
+    return X, y
+
+
 def shp2geoim2(shapefile_path, attribute='code', resolution=10, nodata=0):
     """
     Convertit un shapefile en données raster et métadonnées géospatiales.
@@ -3179,7 +3238,7 @@ class Geoimage:
             now_str = now.strftime("%Y-%m-%d %H:%M:%S")
             self.__listhistory.append(f'[{now_str}] - Changed band names')
 
-        return self
+        # return self
 
 
     def activate_history(self):
@@ -3607,6 +3666,7 @@ class Geoimage:
             - 'band': Sum across spectral bands for each pixel
             - 'row': Sum across rows (lines) for each band and column
             - 'col': Sum across columns for each band and row
+            - 'pixel': Sum across pixels for each bands
             - None: Sum of all values in the image
             Default is None.
 
@@ -3658,6 +3718,7 @@ class Geoimage:
             - 'band': Minimum across spectral bands for each pixel
             - 'row': Minimum across rows (lines) for each band and column
             - 'col': Minimum across columns for each band and row
+            - 'pixel': Minimum across pixels for each bands
             - None: Global minimum of the entire image
             Default is None.
 
@@ -3709,6 +3770,7 @@ class Geoimage:
             - 'band': Maximum across spectral bands for each pixel
             - 'row': Maximum across rows (lines) for each band and column
             - 'col': Maximum across columns for each band and row
+            - 'pixel': Maximum across pixels for each bands
             - None: Global maximum of the entire image
             Default is None.
 
@@ -3760,6 +3822,7 @@ class Geoimage:
             - 'band': Mean across spectral bands for each pixel
             - 'row': Mean across rows (lines) for each band and column
             - 'col': Mean across columns for each band and row
+            - 'pixel': Mean across pixels for each bands
             - None: Global mean of the entire image
             Default is None.
 
@@ -3816,6 +3879,7 @@ class Geoimage:
             - 'band': Std dev across spectral bands for each pixel
             - 'row': Std dev across rows (lines) for each band and column
             - 'col': Std dev across columns for each band and row
+            - 'pixel': Std dev across pixels for each bands
             - None: Global standard deviation of the entire image
             Default is None.
 
@@ -3868,6 +3932,7 @@ class Geoimage:
             - 'band': Median across spectral bands for each pixel
             - 'row': Median across rows (lines) for each band and column
             - 'col': Median across columns for each band and row
+            - 'pixel': Median across pixels for each bands
             - None: Global median of the entire image
             Default is None.
 
@@ -4449,7 +4514,7 @@ class Geoimage:
         if reformat_names is False:
             im_3bands.upload_image(im, names=im_3bands.get_names(), inplace=True)
         else:
-            im_3bands.upload_image(im, inplace=True)
+            im_3bands.upload_image(im, inplace=True, names=im_3bands.get_names())
 
         # Save if requested
         if dest_name is not None:
@@ -4546,7 +4611,7 @@ class Geoimage:
 
         return series, pixel_i, pixel_j
 
-    def visu(self, bands=None, title='', percentile=2, fig_size=DEF_FIG_SIZE, cmap=None, colorbar=False, extent='latlon'):
+    def visu(self, bands=None, title='', percentile=0, fig_size=DEF_FIG_SIZE, cmap=None, colorbar=False, extent='latlon'):
         """
         Visualize one or more bands of the image.
 
@@ -6164,8 +6229,8 @@ class Geoimage:
 
         Parameters
         ----------
-        model : tuple
-            A tuple containing (ml_model, scaler) where:
+        model : scikit model or tuple
+            If tuple, it must containi (ml_model, scaler) where:
             - ml_model: A trained scikit-learn model with a predict() method
             - scaler: The scaler used for standardization (or None if not used)
         bands : list of str or None, optional
@@ -6188,6 +6253,13 @@ class Geoimage:
         >>> _, model = image.kmeans(bands=["NIR", "Red"], n_clusters=3)
         >>> result = image.apply_ML_model(model, bands=["NIR", "Red"])
         >>> result.save("classified.tif")
+        >>>
+        >>> # Apply a RF model trained of other data to a Geoimage
+        >>> from sklearn.ensemble import RandomForestClassifier
+        >>> clf = RandomForestClassifier(max_depth=2, random_state=0)
+        >>> clf.fit(X, y)
+        >>> image.apply_ML_model(clf)
+
 
         Notes
         -----
@@ -6198,9 +6270,13 @@ class Geoimage:
         - Ensuring consistent classification across multiple scenes
         - Time-series analysis with consistent classification
         """
-        # Extract model and scaler from tuple
-        ml_model = model[0]
-        scaler = model[1]
+        if isinstance(model,tuple):
+            # Extract model and scaler from tuple
+            ml_model = model[0]
+            scaler = model[1]
+        else:
+            ml_model = model
+            scaler = None
 
         # Convert image data to table format
         tab_ori = self.numpy_table(bands=bands)
@@ -6722,16 +6798,17 @@ class Geoimage:
         Returns
         -------
         Geoimage
-            The image with standardized values or None if `inplace=True`
+            The image with standardized values and the associated scaler
+            None if `inplace=True` (modify the image directly)
 
         Examples
         --------
         >>> # Standard standardization (zero mean, unit variance)
-        >>> im_standardized  = image.standardize()
+        >>> im_standardized,scaler  = image.standardize()
         >>> print(f"Mean: {im_standardized.mean()}, Std: {im_standardized.std()}")
         >>>
         >>> # Min-max scaling to [0, 1] range
-        >>> im_standardized  = iimage.standardize(type='minmax')
+        >>> im_standardized,scaler  = iimage.standardize(type='minmax')
         >>> print(f"Min: {im_standardized.min()}, Max: {im_standardized.max()}")
         >>>
         >>> # Standardize one image and apply same transformation to another (target)
@@ -8959,42 +9036,42 @@ class Geoimage:
 
         except Exception as e:
             raise RuntimeError(f"Creating image with additional band failed: {str(e)}") from e
-            
+
     def __generic_filter(self, kernel, inplace = False, dest_name=None):
         """
         Apply a generic 2D convolution filter to the spectral bands of the image.
-    
-        This method applies a user-defined kernel (2D array) to each spectral band 
-        of the image using convolution. It can be used, for example, to perform 
-        smoothing (mean filter), edge detection, or other custom spatial filtering 
+
+        This method applies a user-defined kernel (2D array) to each spectral band
+        of the image using convolution. It can be used, for example, to perform
+        smoothing (mean filter), edge detection, or other custom spatial filtering
         operations.
-    
+
         Parameters
         ----------
         kernel : numpy.ndarray
-            A 2D convolution kernel. Must be a square or rectangular matrix 
+            A 2D convolution kernel. Must be a square or rectangular matrix
             (e.g., a Gaussian blur kernel, Sobel operator, etc.).
-    
+
         inplace : bool, default False
             If False, returns a new Geoimage instance with the filtered data.
             If True, modifies the current image in place.
-    
+
         dest_name : str, optional
             Path to save the filtered image. If None, the image is not saved.
             Default is None.
-    
+
         Returns
         -------
         Geoimage or None
             A new Geoimage containing the filtered image if `inplace=False`.
             Returns None if `inplace=True`.
-    
+
         Raises
         ------
         ValueError
-            If the kernel dimensions are invalid or if the image data type 
+            If the kernel dimensions are invalid or if the image data type
             is not supported.
-    
+
         Examples
         --------
         >>> # Create an average filter of size 5
@@ -9003,18 +9080,18 @@ class Geoimage:
         >>> Image_filtered = Image.generic_filter(blur_kernel)
         >>> # Apply the filter in place and save the result
         >>> Image.generic_filter(blur_kernel, inplace=True, dest_name="im_filtered.tif")
-    
+
         Notes
         -----
         - The kernel is applied independently to each spectral band.
-        - This function uses convolution; kernel normalization (e.g., sum to 1) 
+        - This function uses convolution; kernel normalization (e.g., sum to 1)
           is the responsibility of the user.
         - For large images, filtering may require significant memory.
         """
-        
+
         blurred_image = apply_filter(self.numpy_channel_last().astype(np.float64), kernel)
         if inplace:
-            self.upload_image(blurred_image,channel_first=False, inplace = True)
+            self.upload_image(blurred_image,channel_first=False, inplace = True, names=self.get_names())
             if dest_name is not None:
                 write_geoim(self.image, self.__meta, dest_name)
 
@@ -9028,9 +9105,9 @@ class Geoimage:
 
 
 
-        
+
         else:
-            imf = self.upload_image(blurred_image,channel_first=False, inplace = False)
+            imf = self.upload_image(blurred_image,channel_first=False, inplace = False, names=self.get_names())
             if dest_name is not None:
                 imf.save(dest_name)
             if imf.__history:
@@ -9057,32 +9134,32 @@ class Geoimage:
             - "median"   : Median filter.
             - "sobel"    : Sobel edge detection (discrete operator).
             - "laplace"  : Laplacian operator (discrete operator).
-            
+
         kernel : numpy.ndarray, optional
             Convolution kernel (required if mode="generic").
-            
+
         sigma : float, default=1
             Standard deviation for Gaussian filter (if mode="gaussian").
-            
+
         size : int, default=3
             Size of the filter window (for median).
-            
+
         axis : int, default=-1
             Axis along which to compute the Sobel filter (if mode="sobel").
             It is 0 for x, 1 for y. If None, computes gradient magnitude.
-            
+
         pre_smooth_sigma : float or None, default=None
             If set (e.g., 1.0 or 2.0), a Gaussian filter is applied before Sobel or Laplace,
             useful to reduce noise and simulate larger kernels.
-            
+
         inplace : bool, default False
             If False, returns a new Geoimage instance with the filtered data.
             If True, modifies the current image in place.
-    
+
         dest_name : str, optional
             Path to save the filtered image. If None, the image is not saved.
             Default is None.
-        
+
         Returns
         -------
         Geoimage
@@ -9099,9 +9176,9 @@ class Geoimage:
         >>> imf = image.filter("gaussian", sigma=8)
         >>> # Create a median with size = 7
         >>> imf = image.filter("median", size=7)
-        >>> # Create a sobel in x-axis 
+        >>> # Create a sobel in x-axis
         >>> imf = image.filter("sobel", axis=0)
-        >>> # Create a sobel in y-axis 
+        >>> # Create a sobel in y-axis
         >>> imf = image.filter("sobel", axis=1)
         >>> # Create the norm of sobel
         >>> imf = image.filter("sobel")
@@ -9111,7 +9188,7 @@ class Geoimage:
         >>> imf = image.filter("sobel", axis=1, pre_smooth_sigma=2)
         >>> # Create the norm of sobel with pre_smooth_sigma = 2
         >>> imf = image.filter("sobel", pre_smooth_sigma=2))
-        >>> # Create a laplacian filter 
+        >>> # Create a laplacian filter
         >>> imf = image.filter("laplace")
         >>> # Create a laplacian filter pre_smooth_sigma = 2
         >>> imf = image.filter("laplace", pre_smooth_sigma=2)
@@ -9126,15 +9203,15 @@ class Geoimage:
             def _filter_band(band):
                 if method == "gaussian":
                     return gaussian_filter(band.astype(np.float64), sigma=sigma)
-    
+
                 elif method == "median":
                     return median_filter(band, size=size)
-    
+
                 elif method == "laplace":
                     if pre_smooth_sigma is not None:
                         band=gaussian_filter(band.astype(np.float64), sigma=pre_smooth_sigma)
                     return laplace(band.astype(np.float64))
-    
+
                 elif method == "sobel":
                     if pre_smooth_sigma is not None:
                         band=gaussian_filter(band.astype(np.float64), sigma=pre_smooth_sigma)
@@ -9144,10 +9221,10 @@ class Geoimage:
                         return np.hypot(dx, dy)
                     else:
                         return sobel(band.astype(np.float64), axis=axis)
-    
+
                 else:
                     raise ValueError(f"Unknown filter method: {method}")
-    
+
             arr = self.numpy_channel_last()
 
 
@@ -9155,20 +9232,20 @@ class Geoimage:
                 filtered = _filter_band(arr)
             else:
                 filtered = np.stack([_filter_band(arr[:, :, b]) for b in range(arr.shape[2])], axis=2)
-    
+
             if inplace:
-                self.upload_image(filtered, channel_first=False, inplace=True)
+                self.upload_image(filtered, channel_first=False, inplace=True, names=self.get_names())
                 if dest_name:
                     self.save(dest_name)
                 if self.__history is not False:
                     now = datetime.datetime.now()
                     now_str = now.strftime("%Y-%m-%d %H:%M:%S")
-    
+
                     self.__listhistory.append(
                         f'[{now_str}] - Filtered image with %s kernel.'%method
                     )
             else:
-                new_im = self.upload_image(filtered, channel_first=False, inplace=False)
+                new_im = self.upload_image(filtered, channel_first=False, inplace=False, names=self.get_names())
                 if dest_name:
                     new_im.save(dest_name)
                 if new_im.__history:
@@ -9178,4 +9255,3 @@ class Geoimage:
                         f'[{now_str}] - Filtered image with %s kernel.'%method
                     )
                 return new_im
-
