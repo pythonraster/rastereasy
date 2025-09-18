@@ -144,3 +144,70 @@ Journal of Open Source Software, submitted, 2025.
 
 ## License
 This project is licensed under the MIT License – see the [LICENCE](https://github.com/pythonraster/rastereasy/blob/main/LICENCE) file for details.
+
+## Releases
+
+
+0.2.0
+-----
+This release introduces several new features (custom band names persistence, metadata-only loading, partial image reading, improved lat/lon visualization, and warnings for multi-band stacks) while remaining fully backward compatible.
+The version has therefore been bumped from 0.1.4 to 0.2.0.
+
+Here are the main changes
+
+- User-defined band names
+
+  - Band names set by the user via im.change_names are now automatically saved with im.save and reloaded with rastereasy.Geoimage.
+
+- Metadata-only loading
+
+  - You can now load only the metadata without reading the full image using `meta_only=True`: `im = rastereasy.Geoimage('myimage.tif', meta_only=True)`
+
+- Partial image reading (window or area)
+
+  - It is now possible to read a specific part of the image with the area parameter:
+
+  - By indices: `area=((start_row, end_row), (start_col, end_col))`
+
+  - By geographic coordinates: `area=((lon1, lon2), (lat1, lat2))` with `extent='latlon'`
+
+
+- Warning for multi-band images in files2stack
+
+  - When using rastereasy.files2stack with images containing multiple bands, a warning is displayed to inform the user.
+
+- Minor bugs in visualization for latitude/longitude coordinates has also been fixed.
+
+
+
+
+0.1.4
+-----
+
+September 2025.
+Add useful functions for ML
+
+0.1.3
+-----
+
+September 2025.
+Minor corrections in help of functions
+
+0.1.2
+-----
+
+September 2025.
+Add filters (gaussian, median, laplace, sobel and generic) functions.
+
+0.1.1
+-----
+
+June 2025.
+Minor bugs related to interactive visualization fixed (works in console and notebooks).
+
+
+0.1.0
+-----
+
+June 2025.
+First release, version 0.1.0

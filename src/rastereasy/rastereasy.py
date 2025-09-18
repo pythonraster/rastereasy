@@ -25,6 +25,7 @@ from itertools import product
 import warnings
 import copy
 import datetime
+import json
 
 # Scientific and numerical libraries
 import numpy as np
@@ -69,6 +70,11 @@ DEF_FIG_SIZE = (5, 5)  # Default figure size for visualizations
 RANDOM_STATE = None    # Random state for reproducible results
 
 
+        
+
+
+
+
 def read_geoim(source_name, read_image=True, channel_first=True):
     """
     Read a geotiff image file.
@@ -92,26 +98,35 @@ def read_geoim(source_name, read_image=True, channel_first=True):
         Image data if read_image is True, None otherwise
     dict
         Metadata dictionary from rasterio
+    names
+        Metadata dictionary with names of the bands (if given)
 
     Examples
     --------
     >>> # Read image data and metadata
-    >>> image, meta = read_geoim("path/to/image.tif")
+    >>> image, meta, names = read_geoim("path/to/image.tif")
     >>>
     >>> # Read only metadata
-    >>> meta = read_geoim("path/to/image.tif", read_image=False)
+    >>> meta, names = read_geoim("path/to/image.tif", read_image=False)
     """
     src = rio.open(source_name)
+    extra_tags = None
+    tags = src.tags()
+    if "EXTRA_TAGS" in tags:
+        try:
+            extra_tags = json.loads(tags["EXTRA_TAGS"])
+        except json.JSONDecodeError:
+            extra_tags = tags["EXTRA_TAGS"]
     if read_image:
         if channel_first:
-            return src.read(), src.meta
+            return src.read(), src.meta, extra_tags
         else:
-            return np.rollaxis(src.read(), 0, 3), src.meta
+            return np.rollaxis(src.read(), 0, 3), src.meta, extra_tags
     else:
-        return src.meta
+        return src.meta, extra_tags
 
 
-def write_geoim(im, meta_input, dest_name, channel_first=True):
+def write_geoim(im, meta_input, dest_name, channel_first=True, names=None):
     """
     Write a geotiff image to disk.
 
@@ -123,6 +138,8 @@ def write_geoim(im, meta_input, dest_name, channel_first=True):
         Metadata dictionary with rasterio metadata fields
     dest_name : str
         Output path for the geotiff file
+    names : dict
+        Names (in a dict) associated with spectral bands
     channel_first : bool, optional
         If True, assumes image has shape (bands, rows, cols).
         If False, assumes image has shape (rows, cols, bands).
@@ -160,10 +177,13 @@ def write_geoim(im, meta_input, dest_name, channel_first=True):
     if channel_first:
         with rio.open(dest_name, 'w', **meta) as dst:
             dst.write(im)
+            if names is not None:
+                dst.update_tags(EXTRA_TAGS=json.dumps(names))
     else:
         with rio.open(dest_name, 'w', **meta) as dst:
             dst.write(np.rollaxis(im, 2, 0))
-
+            if names is not None:
+                dst.update_tags(EXTRA_TAGS=json.dumps(names))
 
 def diff_im(im1, im2):
     """
@@ -311,7 +331,7 @@ def im2tiles(source_name, dest_name, nb_row, nb_col, overlap=0, type_name='seque
         name_tile=name_tile
     )
 
-def crop_rio(data, deb_row, end_row, deb_col, end_col, dest_name=None, meta=None, channel_first=True):
+def crop_rio(data, deb_row, end_row, deb_col, end_col, dest_name=None, meta=None, channel_first=True, names=None):
     """
     Crop a georeferenced image.
 
@@ -333,6 +353,9 @@ def crop_rio(data, deb_row, end_row, deb_col, end_col, dest_name=None, meta=None
         Default is None.
     meta : dict, optional
         Metadata dictionary (required if data is a numpy array).
+        Default is None.
+    names : dict, optional
+        Band name dictionary 
         Default is None.
     channel_first : bool, optional
         If True, assumes/returns image with shape (bands, rows, cols).
@@ -416,11 +439,19 @@ def crop_rio(data, deb_row, end_row, deb_col, end_col, dest_name=None, meta=None
         if channel_first is True:
             with rio.open(dest_name, 'w', **meta) as outds:
                 outds.write(im)
+                if names is not None:
+                    outds.update_tags(EXTRA_TAGS=json.dumps(names))
         else:
             with rio.open(dest_name, 'w', **meta) as outds:
                 outds.write(np.rollaxis(im, 2, 0))
+                if names is not None:
+                    outds.update_tags(EXTRA_TAGS=json.dumps(names))
 
     return im, meta
+
+
+
+
 
 
 def crop_rio_sequence(source_name, deb_row, end_row, deb_col, end_col, dest_name=None):
@@ -479,7 +510,7 @@ def crop_rio_sequence(source_name, deb_row, end_row, deb_col, end_col, dest_name
     return im_cropped, meta_cropped
 
 
-def resampling(data, final_resolution, dest_name=None, method='cubic_spline', channel_first=True, meta=None):
+def resampling(data, final_resolution, dest_name=None, method='cubic_spline', channel_first=True, meta=None, names = None):
     """
     Resample a georeferenced image to a new resolution.
 
@@ -505,6 +536,9 @@ def resampling(data, final_resolution, dest_name=None, method='cubic_spline', ch
         Default is True.
     meta : dict, optional
         Metadata to use if `data` is a numpy array.
+        Default is None.
+    names : dict, optional
+        Band name dictionary 
         Default is None.
 
     Returns
@@ -541,7 +575,8 @@ def resampling(data, final_resolution, dest_name=None, method='cubic_spline', ch
             final_resolution,
             dest_name=dest_name,
             method=method,
-            channel_first=channel_first
+            channel_first=channel_first,
+            names = names
         )
 
 
@@ -1648,10 +1683,18 @@ def files2stack(imagefile_path, resolution=None, names="origin", dest_name=None,
     if resolution is None:
         # Initialize with first image
         im = Geoimage(imagefile_path[0])
+        if im.nb_bands!=1:
+            message="im %s has %d bands"%(imagefile_path[0],im.nb_bands)
+            warnings.warn(message,category=UserWarning)
 
         # Stack remaining images
         for i in range(len(imagefile_path) - 1):
-            im.stack(Geoimage(imagefile_path[i + 1]), reformat_names=True, inplace = True)
+            ims=Geoimage(imagefile_path[i + 1])
+            if ims.nb_bands!=1:
+                message="im %s has %d bands"%(imagefile_path[i + 1],ims.nb_bands)
+                warnings.warn(message,category=UserWarning)
+                
+            im.stack(ims, reformat_names=True, inplace = True)
 
         # Handle band naming
         if names is not None:
@@ -1686,6 +1729,9 @@ def files2stack(imagefile_path, resolution=None, names="origin", dest_name=None,
     else:
         # Initialize with first image (resampled)
         im = Geoimage(imagefile_path[0])
+        if im.nb_bands!=1:
+            message="im %s has %d bands"%(imagefile_path[0],im.nb_bands)
+            warnings.warn(message,category=UserWarning)
         if im.resolution != resolution:
             im.resampling(resolution, inplace=True)
 
@@ -1696,6 +1742,9 @@ def files2stack(imagefile_path, resolution=None, names="origin", dest_name=None,
             if im_tmpo.resolution != resolution:
                 im_tmpo.resampling(resolution, inplace=True)
 
+            if im_tmpo.nb_bands!=1:
+                message="im %s has %d bands"%(imagefile_path[i + 1],im_tmpo.nb_bands)
+                warnings.warn(message,category=UserWarning)
             # Extract common areas and stack
             im, im_tmpo = extract_common_areas(im, im_tmpo)
             im.stack(im_tmpo, reformat_names=True,inplace=True)
@@ -2035,8 +2084,13 @@ def colorcomp(image, bands, name_save='', names=None, percentile=2, channel_firs
     im[:, :, 1] = normalize(image[:, :, names[bands[1]] - 1], percentile)
     im[:, :, 2] = normalize(image[:, :, names[bands[2]] - 1], percentile)
 
+    
+
+# {'R': 1, 'TGT': 2, 'EZS': 3}
+
     # Save image if requested
     if name_save != '':
+        band_dict = {name: i+1 for i, name in enumerate(bands)}
         if meta is None:
             raise ValueError("Error: you need to provide meta info to save the image")
 
@@ -2061,7 +2115,7 @@ def colorcomp(image, bands, name_save='', names=None, percentile=2, channel_firs
         # Write the color composite
         with rio.open(name_save, 'w', **meta2) as outds:
             outds.write(imt)
-        print("Image saved in", name_save)
+            outds.update_tags(EXTRA_TAGS=json.dumps(band_dict))
 
     # Display the image
     fig, ax = plt.subplots(figsize=fig_size)
@@ -2083,107 +2137,282 @@ class Geoimage:
     This class provides a comprehensive toolkit for working with geospatial raster data,
     supporting operations such as image creation, visualization, band manipulation,
     reprojection, resampling, cropping, and more.
-
-    Parameters
-    ----------
-    source_name : str, optional
-        Path to a GeoTIFF image file to load. If provided, the image data and metadata
-        will be read from this file.
-    names : dict, optional
-        Dictionary mapping band names to band indices (e.g., {'NIR': 1, 'R': 2, 'G': 3}).
-        If not provided, bands will be named numerically ('1', '2', '3', ...).
-    history : bool, optional
-        Whether to track modification history for the image.
-        Default is False.
-    data : numpy.ndarray, optional
-        Image data to initialize the object with. Must be provided with `meta`.
-        Shape should be (bands, rows, cols).
-    meta : dict, optional
-        Metadata dictionary containing rasterio metadata fields (e.g., crs, transform).
-        Required if `data` is provided.
-    georef : bool, optional
-        Whether the image is georeferenced. If None, will be determined from metadata.
-    target_crs : str, optional
-        Target coordinate reference system if reprojection is needed during loading.
-        Default is "EPSG:4326".
-
-    Attributes
-    ----------
-    image : numpy.ndarray
-        The image data array with shape (bands, rows, cols).
-    shape : tuple
-        The dimensions of the image as (rows, cols).
-    nb_bands : int
-        The number of spectral bands in the image.
-    resolution : float
-        The spatial resolution of the image (pixel size in map units).
-    names : dict
-        Dictionary mapping band names to band indices.
-    nodata : float or int
-        Value used to represent no data or invalid pixels.
-
-    Examples
-    --------
-    >>> # Create a Geoimage from a file
-    >>> img = Geoimage("landsat_image.tif")
-    >>> img.info()
-    >>> # Create a Geoimage from a NumPy array with metadata
-    >>> meta = {'driver': 'GTiff', 'width': 100, 'height': 100, 'count': 3,
-    >>> ...         'crs': CRS.from_epsg(4326), 'transform': Affine(0.1, 0, 0, 0, -0.1, 0)}
-    >>> data = np.zeros((3, 100, 100))
-    >>> img = Geoimage(data=data, meta=meta)
-    >>> # Create a Geoimage with custom band names
-    >>> img = Geoimage("landsat_image.tif", names={'R': 1, 'G': 2, 'B': 3, 'NIR': 4})
-
+    
     """
+    
 
-    def __init__(self, source_name=None, names=None, history=False,
-                 data=None, meta=None, georef=None, target_crs="EPSG:4326"):
+
+    def __init__(self, source_name=None, meta_only=False,names=None, history=False,
+                 data=None, meta=None, georef=None, target_crs="EPSG:4326",area=None,extent='pixel'):
         """
         Initialize a Geoimage object from a file or data array with metadata.
+        
+        Parameters
+        ----------
+        source_name : str, optional
+            Path to a geoimage (.tif, .jp2) image file to load. 
+            If provided, the image data and metadata 
+            will be read from this file.
+        meta_only : bool, optional
+            If True, do not read the image but just
+            the meta information (useful for image.info()).
+        names : dict, optional
+            Dictionary mapping band names to 
+            band indices (e.g., {'NIR': 1, 'R': 2, 'G': 3}).
+            If not provided, bands will be 
+            named numerically ('1', '2', '3', ...).
+        area : tuple, optional
+            To read  only a window of the image
+                If based on pixel coordinates, you must indicate 
+                - the row/col coordinades of 
+                        the north-west corner (deb_row,deb_col)
+                - the row/col coordinades of 
+                        the south-east corner (end_row,end_col)
+                in a tuple  `area = ((deb_row,end_row),(deb_col,end_col))`
+                
+                If based on latitude/longitude coordinates, you must indicate 
+                - the lat/lon coordinades of the north-west corner (lat1,lon1)
+                - the lat/lon coordinades of the south-east corner (lat2,lon2)
+                `area = ((lon1,lon2),(lat1,lat2))`
+            If not provide, read the entire image
+        extent : str, optional
+            if `area` is given, precise if the coordinates 
+            are in pixels (extent = "pixel", default)
+            or latitude/longitude (extent = "latlon")
+        history : bool, optional
+            Whether to track modification history for the image.
+            Default is False.
+        data : numpy.ndarray, optional
+            Image data to initialize the object with. 
+            Must be provided with `meta`.
+            Shape should be (bands, rows, cols).
+        meta : dict, optional
+            Metadata dictionary containing rasterio 
+            metadata fields (e.g., crs, transform).
+            Required if `data` is provided.
+        georef : bool, optional
+            Whether the image is georeferenced. 
+            If None, will be determined from metadata.
+        target_crs : str, optional
+            Target coordinate reference system 
+            if reprojection is needed during loading.
+            Default is "EPSG:4326".
+    
+        Attributes
+        ----------
+        image : numpy.ndarray
+            The image data array with shape (bands, rows, cols).
+        shape : tuple
+            The dimensions of the image as (rows, cols).
+        nb_bands : int
+            The number of spectral bands in the image.
+        resolution : float
+            The spatial resolution of the image (pixel size in map units).
+        names : dict
+            Dictionary mapping band names to band indices.
+        nodata : float or int
+            Value used to represent no data or invalid pixels.
+    
+        Examples
+        --------
+        >>> # Read only meta information
+        >>> img = Geoimage("landsat_image.tif",meta_only=True)
+        >>> img.info()
+        >>> 
+        >>> # Read an entire Geoimage from a file
+        >>> img = Geoimage("landsat_image.tif")
+        >>> img.info()
+        >>> 
+        >>> # Read a window of a file from pixel coordinates
+        >>> You must indicate 
+        >>>      - the row/col coordinades of 
+        >>>            the north-west corner (deb_row,deb_col)
+        >>>      - the row/col coordinades of 
+        >>>            the south-east corner (end_row,end_col)
+        >>> in a tuple  `((deb_row,end_row),(deb_col,end_col))`
+        >>> img = Geoimage("landsat_image.tif", area=((200,500),(240,600)))
+        >>> img.info()
+        >>> 
+        >>> # Read a window of a file from lat/lon coordinates (parameter extent='latlon')
+        >>> You must indicate 
+        >>>      - the lat/lon coordinades of the north-west corner (lat1,lon1)
+        >>>      - the lat/lon coordinades of the south-east corner (lat2,lon2)
+        >>> in a tuple  `((lon1,lon2),(lat1,lat2))`
+        >>> img = Geoimage("landsat_image.tif", area=((38.36,38.41),(7.06,7.02)),extent='latlon'))
+        >>> img.info()
+        >>> 
+        >>> # Create a Geoimage from a NumPy array with metadata
+        >>> meta = {'driver': 'GTiff', 'width': 100, 'height': 100, 'count': 3,
+        >>> ...         'crs': CRS.from_epsg(4326), 'transform': Affine(0.1, 0, 0, 0, -0.1, 0)}
+        >>> data = np.zeros((3, 100, 100))
+        >>> img = Geoimage(data=data, meta=meta)
+        >>> 
+        >>> # Create a Geoimage with custom band names
+        >>> img = Geoimage("landsat_image.tif", names={'R': 1, 'G': 2, 'B': 3, 'NIR': 4})
+        >>> 
+        >>> # Create a Geoimage with custom band names
+        >>> img = Geoimage("landsat_image.tif", names={'R': 1, 'G': 2, 'B': 3, 'NIR': 4})
+    
         """
-        if source_name is not None:
-            # Case 1: Loading from rst/rdc file format
-            if (os.path.splitext(source_name)[1].lower() in ['.rst', '.rdc']):
-                name_rst, name_rdc = find_rst_and_rdc(os.path.splitext(source_name)[0])
-                self.image, self.__meta = read_rst_with_rdc(name_rst, name_rdc, target_crs=target_crs)
-                self.__georef = True
-            # Case 2: Loading from standard geotiff file
-            else:
-                src = rio.open(source_name)
-                if src.crs is None or src.transform is None:
-                    warnings.warn("Image not georeferenced. Some functions may not work.")
-                    self.__georef = False
-                else:
-                    self.__georef = True
-                self.image = src.read().copy()
-                self.__meta = src.meta
+        extra_tags = None # To deal with names of the bands
+        if meta_only:
+            if source_name is None:
+                raise ValueError("You must provide a source_name to get meta information")
 
-        # Case 3: Creating from provided data and metadata
-        elif meta is not None:
-            self.__meta = meta
-            if georef is False:
+            src = rio.open(source_name)
+            if src.crs is None or src.transform is None:
+                warnings.warn("Image not georeferenced. Some functions may not work.")
                 self.__georef = False
             else:
                 self.__georef = True
+            self.image = None
+            self.__meta = src.meta
 
-            if data is not None:
-                # Ensure data is in the correct shape (bands, rows, cols)
-                if len(data.shape) == 2:
-                    self.image = data.reshape((1, data.shape[0], data.shape[1]))
-                else:
-                    self.image = data
-
-                # Validate dimensions match metadata
-                if ((meta['height'] != self.image.shape[1]) or
-                    (meta['width'] != self.image.shape[2]) or
-                    (meta['count'] != self.image.shape[0])):
-                    raise ValueError("Error: metadata dimensions do not match data dimensions")
+            # Check if previous names have been saved
+            tags = src.tags()
+            if "EXTRA_TAGS" in tags:
+                try:
+                    extra_tags = json.loads(tags["EXTRA_TAGS"])
+                except json.JSONDecodeError:
+                    extra_tags = tags["EXTRA_TAGS"]
+            # If not, usual names
+            if extra_tags is None:
+                self.names = {}
+                for i in range(self.__meta['count']):
+                    self.names[str(i + 1)] = i + 1
             else:
-                # Create empty image with dimensions from metadata
-                self.image = np.zeros((meta['count'], meta['height'], meta['width']))
+                if check_dict(extra_tags) and len(extra_tags)==self.__meta['count']:
+                    self.names = extra_tags
+                else:
+                    self.names = {}
+                    for i in range(self.__meta['count']):
+                        self.names[str(i + 1)] = i + 1
+                    
         else:
-            raise ValueError("Either source_name or both data and meta must be provided")
+            
+            if source_name is not None:
+                # Case 1: Loading from rst/rdc file format
+                if (os.path.splitext(source_name)[1].lower() in ['.rst', '.rdc']):
+                    name_rst, name_rdc = find_rst_and_rdc(os.path.splitext(source_name)[0])
+                    self.image, self.__meta = read_rst_with_rdc(name_rst, name_rdc, target_crs=target_crs)
+                    self.__georef = True
+                # Case 2: Loading from standard geotiff file
+                else:
+                    # Read the entire image
+                    if area is None:
+                        src = rio.open(source_name)
+                        if src.crs is None or src.transform is None:
+                            warnings.warn("Image not georeferenced. Some functions may not work.")
+                            self.__georef = False
+                        else:
+                            self.__georef = True
+                        self.image = src.read().copy()
+                        self.__meta = src.meta
+                        
+                        # Check if previous names have been saved
+                        
+                        tags = src.tags()
+                        if "EXTRA_TAGS" in tags:
+                            try:
+                                extra_tags = json.loads(tags["EXTRA_TAGS"])
+                            except json.JSONDecodeError:
+                                extra_tags = tags["EXTRA_TAGS"]
+                        # If not, usual names
+                        if extra_tags is not None:
+                            if not (check_dict(extra_tags) and len(extra_tags)==self.__meta['count']):
+                                extra_tags = None
+
+
+
+
+                    
+
+
+                    
+                    else:
+                        if extent=='pixel':
+                            # coordinates in pixel
+                            # area=((deb_row,end_row),(deb_col,end_col))
+                            nb_lig=area[0][1]-area[0][0]
+                            nb_col=area[1][1]-area[1][0]
+                            offset_col = area[1][0]
+                            offset_lig = area[0][0]
+                            window = windows.Window(offset_col, offset_lig, nb_col, nb_lig)
+                            with rio.open(source_name) as src:
+                                self.__meta=src.meta.copy()
+                                self.image = src.read(window=window).copy()
+        
+                            self.__meta.update({
+                                "height": window.height,
+                                "width": window.width,
+                                "transform": windows.transform(window, src.transform)
+                            })
+                            
+                            self.__georef = True
+                        else:
+                            # coordinates in pixel
+                            # area=((deb_row,end_row),(deb_col,end_col))
+                            src=rio.open(source_name)
+                            try:
+                                deb_row_lon = area[0][0]
+                                end_row_lon = area[0][1]
+                                deb_col_lat = area[1][0]
+                                end_col_lat = area[1][1]                                
+                                row_deb, col_deb = latlon_to_pixels(src.meta, 
+                                                                    deb_col_lat, 
+                                                                    deb_row_lon)
+                                row_end, col_end = latlon_to_pixels(src.meta, 
+                                                                    end_col_lat, 
+                                                                    end_row_lon)
+                            except Exception as e:
+                                raise ValueError(f"Failed to convert geographic coordinates to pixel coordinates: {str(e)}")
+                                            
+                            
+                            nb_lig=row_end-row_deb
+                            nb_col=col_end-col_deb                            
+                            offset_col = col_deb
+                            offset_lig = row_deb
+                            window = windows.Window(offset_col, offset_lig, nb_col, nb_lig)
+                            with rio.open(source_name) as src:
+                                self.__meta=src.meta.copy()
+                                self.image = src.read(window=window).copy()
+        
+                            self.__meta.update({
+                                "height": window.height,
+                                "width": window.width,
+                                "transform": windows.transform(window, src.transform)
+                            })
+                            
+                            self.__georef = True
+                            
+    
+
+    
+            # Case 3: Creating from provided data and metadata
+            elif meta is not None:
+                self.__meta = meta
+                if georef is False:
+                    self.__georef = False
+                else:
+                    self.__georef = True
+    
+                if data is not None:
+                    # Ensure data is in the correct shape (bands, rows, cols)
+                    if len(data.shape) == 2:
+                        self.image = data.reshape((1, data.shape[0], data.shape[1]))
+                    else:
+                        self.image = data
+    
+                    # Validate dimensions match metadata
+                    if ((meta['height'] != self.image.shape[1]) or
+                        (meta['width'] != self.image.shape[2]) or
+                        (meta['count'] != self.image.shape[0])):
+                        raise ValueError("Error: metadata dimensions do not match data dimensions")
+                else:
+                    # Create empty image with dimensions from metadata
+                    self.image = np.zeros((meta['count'], meta['height'], meta['width']))
+            else:
+                raise ValueError("Either source_name or both data and meta must be provided")
 
         # Set nodata value from metadata if available
         if "nodata" in self.__meta:
@@ -2206,7 +2435,11 @@ class Geoimage:
         # Setup band names
         if names is None:
             self.__namesgiven = False
-            self.__update_names()
+            if meta_only is False:
+                if extra_tags is None:
+                    self.__update_names()
+                else:
+                    self.names = reorder_dict_by_values(extra_tags)
         else:
             if len(names) != self.__meta['count']:
                 raise ValueError(f"Error: the number of given names ({len(names)}) does not match "
@@ -2219,6 +2452,8 @@ class Geoimage:
                 self.names = reorder_dict_by_values(names)
 
         # Update derived properties
+        if meta_only is False:
+            self.__update()
         self.__update()
 
     def __update(self):
@@ -2236,13 +2471,16 @@ class Geoimage:
             limxm, limym = self.pixel2latlon(self.shape[0], self.shape[1])
 
             if ((limx == limxm) or (limy == limym)):
-                self.__extent_latlon = [0, self.shape[1], self.shape[0], 0]
+#                self.__extent_latlon = [0, self.shape[1], self.shape[0], 0]
+                self.__extent_latlon = [0, self.shape[1],  0, self.shape[0]]
                 self.__extent_pixels = [0, self.shape[1], self.shape[0], 0]
             else:
-                self.__extent_latlon = [limy, limym, limx, limxm]
+#                self.__extent_latlon = [limy, limym, limx, limxm]
+                self.__extent_latlon = [limy, limym, limxm, limx]
                 self.__extent_pixels = [0, self.shape[1], self.shape[0], 0]
         else:
-            self.__extent_latlon = [0, self.shape[1], 0, self.shape[0]]
+#            self.__extent_latlon = [0, self.shape[1], 0, self.shape[0]]
+            self.__extent_latlon = [0, self.shape[1],  self.shape[0], 0]
             self.__extent_pixels = [0, self.shape[1], 0, self.shape[0]]
 
         # Validate number of bands
@@ -3230,8 +3468,11 @@ class Geoimage:
             raise ValueError(f"Error: the number of given names ({len(names)}) does not match "
                            f"the number of spectral bands ({self.__meta['count']})")
         else:
-            self.__namesgiven = True
-            self.names = reorder_dict_by_values(names)
+            if check_dict(names):
+                self.__namesgiven = True
+                self.names = reorder_dict_by_values(names)
+            else: 
+                raise ValueError(f"Error: inconsistent names given {names}")
 
         if self.__history is not False:
             now = datetime.datetime.now()
@@ -3362,10 +3603,14 @@ class Geoimage:
         >>> [2023-09-15 10:31:45] - Apply resampling at 30.000000 meters
         """
         print('- Size of the image:')
-        print('   - Rows (height):', self.shape[0])
-        print('   - Cols (width):', self.shape[1])
-        print('   - Bands:', self.nb_bands)
-        print('- Spatial resolution:', self.resolution, ' meters / degree (depending on projection system)')
+#        print('   - Rows (height):', self.shape[0])
+#        print('   - Cols (width):', self.shape[1])
+#        print('   - Bands:', self.nb_bands)
+#        print('- Spatial resolution:', self.resolution, ' meters / degree (depending on projection system)')
+        print('   - Rows (height):', self.__meta['height'])
+        print('   - Cols (width):', self.__meta['width'])
+        print('   - Bands:', self.__meta['count'])
+        print('- Spatial resolution:', self.__meta['transform'][0], ' meters / degree (depending on projection system)')
 
         if self.__georef is True:
             center_lat, center_lon = self.get_latlon_coordinates()
@@ -4515,6 +4760,7 @@ class Geoimage:
             im_3bands.upload_image(im, names=im_3bands.get_names(), inplace=True)
         else:
             im_3bands.upload_image(im, inplace=True, names=im_3bands.get_names())
+        im_3bands.change_nodata(0)
 
         # Save if requested
         if dest_name is not None:
@@ -4967,7 +5213,7 @@ class Geoimage:
 
         # Save if requested
         if dest_name is not None:
-            write_geoim(data, meta, dest_name)
+            write_geoim(data, meta, dest_name, names= names)
 
         # Create and return the new Geoimage
         return Geoimage(data=data, meta=meta, names=names, georef=self.__georef)
@@ -5042,7 +5288,10 @@ class Geoimage:
 
         # Update band names
         if names is not None:
-            self.names = names
+            if check_dict(names):
+                self.names = names
+            else:
+                self.__update_names()
         else:
             self.__update_names()
 
@@ -5159,7 +5408,10 @@ class Geoimage:
 
             # Update band names
             if names is not None:
-                self.names = names
+                if check_dict(names):
+                    self.names = names
+                else:
+                    self.__update_names()
             else:
                 self.__update_names()
 
@@ -5252,9 +5504,13 @@ class Geoimage:
         meta = self.__meta.copy()
         meta['count'] = image.shape[0]
         meta['dtype'] = str(image.dtype)
+        
 
         # Create the new Geoimage
         geoim = Geoimage(data=image, meta=meta, names=names, georef=self.__georef, history=self.__history)
+        if names is not None:
+            if check_dict(names) is False:
+                geoim.reset_names()
 
         # Save if requested
         if dest_name is not None:
@@ -5372,7 +5628,7 @@ class Geoimage:
         """
         data, meta = resampling(self.image, final_resolution,
                               dest_name=dest_name, method=method,
-                              channel_first=True, meta=self.__meta)
+                              channel_first=True, meta=self.__meta, names = self.names)
 
         # Create a new Geoimage with the resampled data
         if self.__namesgiven is False:
@@ -5469,7 +5725,8 @@ class Geoimage:
         data, meta = crop_rio(self.image, deb_row_lon_crop,
                              end_row_lon_crop, deb_col_lat_crop,
                              end_col_lat_crop, dest_name=dest_name,
-                             meta=self.__meta, channel_first=True)
+                             meta=self.__meta, channel_first=True,
+                             names = self.names)
 
         # Create a new Geoimage with the cropped data
         if self.__namesgiven is False:
@@ -5803,7 +6060,7 @@ class Geoimage:
         - To save a subset of bands, first use select_bands() to create a new image with only the desired bands, then save that image
         """
         # Save the image to the specified file
-        write_geoim(self.image, self.__meta, dest_name)
+        write_geoim(self.image, self.__meta, dest_name, names= self.names)
 
         if self.__history is not False:
             now = datetime.datetime.now()
@@ -7132,7 +7389,7 @@ class Geoimage:
                 self.image, self.__meta = resampling(self.image, final_resolution,
                                                     dest_name=dest_name,
                                                     method=method, channel_first=True,
-                                                    meta=self.__meta)
+                                                    meta=self.__meta, names = self.names)
                 self.__update()
 
                 if self.__history is not False and update_history:
@@ -7158,22 +7415,22 @@ class Geoimage:
         Parameters
         ----------
         deb_row_lon : int or float
-            Starting position:
+            Starting position (north):
             - If pixel=True: Starting row (y) coordinate
             - If pixel=False: Starting longitude coordinate
 
         end_row_lon : int or float
-            Ending position:
+            Ending position (south):
             - If pixel=True: Ending row (y) coordinate
             - If pixel=False: Ending longitude coordinate
 
         deb_col_lat : int or float
-            Starting position:
+            Starting position (west):
             - If pixel=True: Starting column (x) coordinate
             - If pixel=False: Starting latitude coordinate
 
         end_col_lat : int or float
-            Ending position:
+            Ending position (east):
             - If pixel=True: Ending column (x) coordinate
             - If pixel=False: Ending latitude coordinate
 
@@ -7278,7 +7535,8 @@ class Geoimage:
                                                 deb_col_lat_crop, end_col_lat_crop,
                                                 dest_name=dest_name,
                                                 meta=self.__meta,
-                                                channel_first=True)
+                                                channel_first=True,
+                                                names = self.names)
                 self.__update()
 
                 # Add to history if enabled
@@ -7418,7 +7676,7 @@ class Geoimage:
 
                 # Save if requested
                 if dest_name is not None:
-                    write_geoim(self.image, self.__meta, dest_name)
+                    write_geoim(self.image, self.__meta, dest_name, names= self.names)
 
                 # Update history if enabled
                 if self.__history is not False:
@@ -7728,7 +7986,7 @@ class Geoimage:
 
                 # Save if requested
                 if dest_name is not None:
-                    write_geoim(self.image, self.__meta, dest_name)
+                    write_geoim(self.image, self.__meta, dest_name, names= self.names)
 
                 # Update history if enabled
                 if self.__history is not False:
@@ -8059,7 +8317,7 @@ class Geoimage:
 
                 # Save if requested
                 if dest_name is not None:
-                    write_geoim(self.image, self.__meta, dest_name)
+                    write_geoim(self.image, self.__meta, dest_name, names= self.names)
 
                 # Update history if enabled
                 if self.__history is not False:
@@ -8799,7 +9057,7 @@ class Geoimage:
 
                 # Save if requested
                 if dest_name is not None:
-                    write_geoim(self.image, self.__meta, dest_name)
+                    write_geoim(self.image, self.__meta, dest_name, names= self.names)
 
                 # Update history if enabled
                 if self.__history is not False:
@@ -9093,7 +9351,7 @@ class Geoimage:
         if inplace:
             self.upload_image(blurred_image,channel_first=False, inplace = True, names=self.get_names())
             if dest_name is not None:
-                write_geoim(self.image, self.__meta, dest_name)
+                self.save(dest_name)
 
             if self.__history is not False:
                 now = datetime.datetime.now()

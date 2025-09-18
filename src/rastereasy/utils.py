@@ -28,6 +28,8 @@ if os.environ.get('DISPLAY', '') == '':
     matplotlib.use('agg')
 
 from scipy import ndimage, signal
+import json
+
 #else:
     # Utilise 'tkagg' pour un affichage interactif standard
 #    matplotlib.use('tkagg')
@@ -202,7 +204,7 @@ def list_fles(path,ext):
 
     listfiles = os.listdir(path)
 
-    # Filtrer ceux qui se terminent par .tif
+    # Filtrer ceux qui se terminent par l'ext
     files_ext = [f for f in listfiles if f.endswith(ext)]
 
     # Trie par ordre alphabétique
@@ -542,7 +544,7 @@ def resample_image_with_resolution(
 
 
 
-def resampling_image(image, meta, final_resolution, dest_name=None, method='cubic_spline', channel_first=True):
+def resampling_image(image, meta, final_resolution, dest_name=None, method='cubic_spline', channel_first=True, names=None):
     """
     Resampling of an image
 
@@ -551,6 +553,7 @@ def resampling_image(image, meta, final_resolution, dest_name=None, method='cubi
     - final_resolution: the desired resolution (in meters)
     - dest_name: (optional) name of the resampled image file
     - method: resampling method (default: cubic_spline)
+    - name: (optional) name of the spectral bands in a dict
     - channel_first (optional, default True): output an image of shape (bands x height x width)
                                               otherwise: (height x width x bands)
     - return: resampled image, updated meta
@@ -644,6 +647,8 @@ def resampling_image(image, meta, final_resolution, dest_name=None, method='cubi
             os.makedirs(folder)
         with rio.open(dest_name, 'w', **new_meta) as dst:
             dst.write(data)
+            if names is not None:
+                dst.update_tags(EXTRA_TAGS=json.dumps(names))
 
     # Adjust output shape based on channel_first flag
     if channel_first:
@@ -875,6 +880,60 @@ def add_ordered_key(dictionary_input, key_name=None):
     dictionary[key_name] = new_value
 
     return dictionary
+
+def check_dict(d):
+    """
+    Check whether a dictionary satisfies the following conditions:
+    
+    1. All keys are unique.
+    2. The set of values is exactly {1, 2, ..., N}, 
+       where N is the number of keys.
+
+    Parameters
+    ----------
+    d : dict
+        Dictionary with string keys and integer values.
+
+    Returns
+    -------
+    bool
+        True if the dictionary is valid, False otherwise.
+
+    Examples
+    --------
+    >>> d1 = {'name1': 1, 'name2': 3, 'name3': 2}
+    >>> check_dict(d1)
+    True
+
+    >>> d2 = {'name1': 1, 'name2': 3, 'name3': 6}
+    >>> check_dict(d2)
+    False
+    """
+    n = len(d)
+    errors = []
+
+    # Vérif unicité des clés
+    if len(d) != len(set(d.keys())):
+        errors.append("Les clés ne sont pas toutes uniques.")
+
+    # Vérif plage des valeurs
+    values = set(d.values())
+    expected = set(range(1, n+1))
+
+    missing = expected - values
+    extra = values - expected
+
+    if missing:
+        errors.append(f"Valeurs manquantes : {sorted(missing)}")
+    if extra:
+        errors.append(f"Valeurs en trop : {sorted(extra)}")
+
+    if errors:
+#        return False, errors
+        return False
+#    return True, ["Dictionnaire valide."]
+    return True
+
 
 def concat_dicts_with_keys(dict1, dict2):
     """
