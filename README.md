@@ -157,7 +157,7 @@ This project is licensed under the MIT License – see the [LICENCE](https://git
 
 - Renamed `apply_ML_model()` to `predict()`.
 
-  - Both functions remain available in this version, but apply_ML_model() is deprecated and will be removed in a future release.
+  - Both functions remain available in this version, but `apply_ML_model()` is deprecated and will be removed in a future release.
 
 
 0.2.0
