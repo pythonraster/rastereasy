@@ -146,6 +146,9 @@ Journal of Open Source Software, submitted, 2025.
 This project is licensed under the MIT License – see the [LICENCE](https://github.com/pythonraster/rastereasy/blob/main/LICENCE) file for details.
 
 ## Releases
+0.2.2
+-----
+- Minor bug in plotting
 
 0.2.1
 -----

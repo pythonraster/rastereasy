@@ -15,7 +15,7 @@ Example:
 >>> image = rastereasy.Geoimage("example.tif")
 >>> image.info()
 >>> image.colorcomp(['4', '3', '2'])
->>> image.resampling(2, inplace= True)
+>>> image.resample(2, inplace= True)
 >>> im_reproject = image.reproject("EPSG:4326")
 >>> im_reproject.save("output.tif")
 """
@@ -25,7 +25,7 @@ from .rastereasy import *
 from .utils import *
 
 # Define package metadata
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 __author__ = "Thomas Corpetti"
 __license__ = "MIT"
 

@@ -1225,7 +1225,7 @@ def is_notebook():
         return False
 
 
-def plot_clic_spectra2(im, imc, figsize=(15, 5), plot_legend=False, names=None,
+def plot_clic_spectra(im, imc, figsize=(15, 5), plot_legend=False, names=None,
                       title_im="Original image (click outside or finish button to stop)",
                       title_spectra="Spectra", xlabel="Bands", ylabel="Value",callback=None):
     if is_notebook():
