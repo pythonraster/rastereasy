@@ -147,6 +147,18 @@ This project is licensed under the MIT License – see the [LICENCE](https://git
 
 ## Releases
 
+0.2.1
+-----
+- Added a new boolean test: `image.isnan()` to check for NaN values in an image.
+
+- Renamed `resampling()` to `resample()`.
+
+  - Both functions remain available in this version, but `resampling()` is deprecated and will be removed in a future release.
+
+- Renamed `apply_ML_model()` to `predict()`.
+
+  - Both functions remain available in this version, but apply_ML_model() is deprecated and will be removed in a future release.
+
 
 0.2.0
 -----

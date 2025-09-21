@@ -884,9 +884,9 @@ def add_ordered_key(dictionary_input, key_name=None):
 def check_dict(d):
     """
     Check whether a dictionary satisfies the following conditions:
-    
+
     1. All keys are unique.
-    2. The set of values is exactly {1, 2, ..., N}, 
+    2. The set of values is exactly {1, 2, ..., N},
        where N is the number of keys.
 
     Parameters
@@ -1205,8 +1205,8 @@ def extract_colorcomp(im_input, bands=None, percentile=2):
 
 
 def reset_matplotlib(mode='inline'):
-    plt.close('all')  
-    #plt.clf()        
+    plt.close('all')
+    #plt.clf()
 
     ipython = get_ipython()
     if ipython is not None:
@@ -1224,7 +1224,8 @@ def is_notebook():
     except:
         return False
 
-def plot_clic_spectra(im, imc, figsize=(15, 5), plot_legend=False, names=None,
+
+def plot_clic_spectra2(im, imc, figsize=(15, 5), plot_legend=False, names=None,
                       title_im="Original image (click outside or finish button to stop)",
                       title_spectra="Spectra", xlabel="Bands", ylabel="Value",callback=None):
     if is_notebook():
@@ -1444,7 +1445,7 @@ def apply_filter2(image, kernel):
 def apply_filter(image, kernel, method="auto"):
     """
     Apply a 2D filter to an image (multi-band or single-band).
-    
+
     Parameters
     ----------
     image : numpy.ndarray
@@ -1455,13 +1456,13 @@ def apply_filter(image, kernel, method="auto"):
         'auto' (default): use direct convolution for small kernels, FFT for large.
         'direct': always use ndimage.convolve.
         'fft': always use signal.fftconvolve.
-    
+
     Returns
     -------
     numpy.ndarray
         Filtered image, same shape as input.
     """
-    
+
     def _filter_band(band, kernel, method):
         if method == "direct":
 #            return ndimage.convolve(band, kernel, mode="reflect")

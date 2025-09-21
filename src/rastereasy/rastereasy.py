@@ -70,7 +70,7 @@ DEF_FIG_SIZE = (5, 5)  # Default figure size for visualizations
 RANDOM_STATE = None    # Random state for reproducible results
 
 
-        
+
 
 
 
@@ -355,7 +355,7 @@ def crop_rio(data, deb_row, end_row, deb_col, end_col, dest_name=None, meta=None
         Metadata dictionary (required if data is a numpy array).
         Default is None.
     names : dict, optional
-        Band name dictionary 
+        Band name dictionary
         Default is None.
     channel_first : bool, optional
         If True, assumes/returns image with shape (bands, rows, cols).
@@ -538,7 +538,7 @@ def resampling(data, final_resolution, dest_name=None, method='cubic_spline', ch
         Metadata to use if `data` is a numpy array.
         Default is None.
     names : dict, optional
-        Band name dictionary 
+        Band name dictionary
         Default is None.
 
     Returns
@@ -1693,7 +1693,7 @@ def files2stack(imagefile_path, resolution=None, names="origin", dest_name=None,
             if ims.nb_bands!=1:
                 message="im %s has %d bands"%(imagefile_path[i + 1],ims.nb_bands)
                 warnings.warn(message,category=UserWarning)
-                
+
             im.stack(ims, reformat_names=True, inplace = True)
 
         # Handle band naming
@@ -2084,7 +2084,7 @@ def colorcomp(image, bands, name_save='', names=None, percentile=2, channel_firs
     im[:, :, 1] = normalize(image[:, :, names[bands[1]] - 1], percentile)
     im[:, :, 2] = normalize(image[:, :, names[bands[2]] - 1], percentile)
 
-    
+
 
 # {'R': 1, 'TGT': 2, 'EZS': 3}
 
@@ -2137,67 +2137,67 @@ class Geoimage:
     This class provides a comprehensive toolkit for working with geospatial raster data,
     supporting operations such as image creation, visualization, band manipulation,
     reprojection, resampling, cropping, and more.
-    
+
     """
-    
+
 
 
     def __init__(self, source_name=None, meta_only=False,names=None, history=False,
                  data=None, meta=None, georef=None, target_crs="EPSG:4326",area=None,extent='pixel'):
         """
         Initialize a Geoimage object from a file or data array with metadata.
-        
+
         Parameters
         ----------
         source_name : str, optional
-            Path to a geoimage (.tif, .jp2) image file to load. 
-            If provided, the image data and metadata 
+            Path to a geoimage (.tif, .jp2) image file to load.
+            If provided, the image data and metadata
             will be read from this file.
         meta_only : bool, optional
             If True, do not read the image but just
             the meta information (useful for image.info()).
         names : dict, optional
-            Dictionary mapping band names to 
+            Dictionary mapping band names to
             band indices (e.g., {'NIR': 1, 'R': 2, 'G': 3}).
-            If not provided, bands will be 
+            If not provided, bands will be
             named numerically ('1', '2', '3', ...).
         area : tuple, optional
             To read  only a window of the image
-                If based on pixel coordinates, you must indicate 
-                - the row/col coordinades of 
+                If based on pixel coordinates, you must indicate
+                - the row/col coordinades of
                         the north-west corner (deb_row,deb_col)
-                - the row/col coordinades of 
+                - the row/col coordinades of
                         the south-east corner (end_row,end_col)
                 in a tuple  `area = ((deb_row,end_row),(deb_col,end_col))`
-                
-                If based on latitude/longitude coordinates, you must indicate 
+
+                If based on latitude/longitude coordinates, you must indicate
                 - the lat/lon coordinades of the north-west corner (lat1,lon1)
                 - the lat/lon coordinades of the south-east corner (lat2,lon2)
                 `area = ((lon1,lon2),(lat1,lat2))`
             If not provide, read the entire image
         extent : str, optional
-            if `area` is given, precise if the coordinates 
+            if `area` is given, precise if the coordinates
             are in pixels (extent = "pixel", default)
             or latitude/longitude (extent = "latlon")
         history : bool, optional
             Whether to track modification history for the image.
             Default is False.
         data : numpy.ndarray, optional
-            Image data to initialize the object with. 
+            Image data to initialize the object with.
             Must be provided with `meta`.
             Shape should be (bands, rows, cols).
         meta : dict, optional
-            Metadata dictionary containing rasterio 
+            Metadata dictionary containing rasterio
             metadata fields (e.g., crs, transform).
             Required if `data` is provided.
         georef : bool, optional
-            Whether the image is georeferenced. 
+            Whether the image is georeferenced.
             If None, will be determined from metadata.
         target_crs : str, optional
-            Target coordinate reference system 
+            Target coordinate reference system
             if reprojection is needed during loading.
             Default is "EPSG:4326".
-    
+
         Attributes
         ----------
         image : numpy.ndarray
@@ -2212,47 +2212,47 @@ class Geoimage:
             Dictionary mapping band names to band indices.
         nodata : float or int
             Value used to represent no data or invalid pixels.
-    
+
         Examples
         --------
         >>> # Read only meta information
         >>> img = Geoimage("landsat_image.tif",meta_only=True)
         >>> img.info()
-        >>> 
+        >>>
         >>> # Read an entire Geoimage from a file
         >>> img = Geoimage("landsat_image.tif")
         >>> img.info()
-        >>> 
+        >>>
         >>> # Read a window of a file from pixel coordinates
-        >>> You must indicate 
-        >>>      - the row/col coordinades of 
+        >>> You must indicate
+        >>>      - the row/col coordinades of
         >>>            the north-west corner (deb_row,deb_col)
-        >>>      - the row/col coordinades of 
+        >>>      - the row/col coordinades of
         >>>            the south-east corner (end_row,end_col)
         >>> in a tuple  `((deb_row,end_row),(deb_col,end_col))`
         >>> img = Geoimage("landsat_image.tif", area=((200,500),(240,600)))
         >>> img.info()
-        >>> 
+        >>>
         >>> # Read a window of a file from lat/lon coordinates (parameter extent='latlon')
-        >>> You must indicate 
+        >>> You must indicate
         >>>      - the lat/lon coordinades of the north-west corner (lat1,lon1)
         >>>      - the lat/lon coordinades of the south-east corner (lat2,lon2)
         >>> in a tuple  `((lon1,lon2),(lat1,lat2))`
         >>> img = Geoimage("landsat_image.tif", area=((38.36,38.41),(7.06,7.02)),extent='latlon'))
         >>> img.info()
-        >>> 
+        >>>
         >>> # Create a Geoimage from a NumPy array with metadata
         >>> meta = {'driver': 'GTiff', 'width': 100, 'height': 100, 'count': 3,
         >>> ...         'crs': CRS.from_epsg(4326), 'transform': Affine(0.1, 0, 0, 0, -0.1, 0)}
         >>> data = np.zeros((3, 100, 100))
         >>> img = Geoimage(data=data, meta=meta)
-        >>> 
+        >>>
         >>> # Create a Geoimage with custom band names
         >>> img = Geoimage("landsat_image.tif", names={'R': 1, 'G': 2, 'B': 3, 'NIR': 4})
-        >>> 
+        >>>
         >>> # Create a Geoimage with custom band names
         >>> img = Geoimage("landsat_image.tif", names={'R': 1, 'G': 2, 'B': 3, 'NIR': 4})
-    
+
         """
         extra_tags = None # To deal with names of the bands
         if meta_only:
@@ -2287,9 +2287,9 @@ class Geoimage:
                     self.names = {}
                     for i in range(self.__meta['count']):
                         self.names[str(i + 1)] = i + 1
-                    
+
         else:
-            
+
             if source_name is not None:
                 # Case 1: Loading from rst/rdc file format
                 if (os.path.splitext(source_name)[1].lower() in ['.rst', '.rdc']):
@@ -2308,9 +2308,9 @@ class Geoimage:
                             self.__georef = True
                         self.image = src.read().copy()
                         self.__meta = src.meta
-                        
+
                         # Check if previous names have been saved
-                        
+
                         tags = src.tags()
                         if "EXTRA_TAGS" in tags:
                             try:
@@ -2325,10 +2325,10 @@ class Geoimage:
 
 
 
-                    
 
 
-                    
+
+
                     else:
                         if extent=='pixel':
                             # coordinates in pixel
@@ -2341,13 +2341,13 @@ class Geoimage:
                             with rio.open(source_name) as src:
                                 self.__meta=src.meta.copy()
                                 self.image = src.read(window=window).copy()
-        
+
                             self.__meta.update({
                                 "height": window.height,
                                 "width": window.width,
                                 "transform": windows.transform(window, src.transform)
                             })
-                            
+
                             self.__georef = True
                         else:
                             # coordinates in pixel
@@ -2357,37 +2357,37 @@ class Geoimage:
                                 deb_row_lon = area[0][0]
                                 end_row_lon = area[0][1]
                                 deb_col_lat = area[1][0]
-                                end_col_lat = area[1][1]                                
-                                row_deb, col_deb = latlon_to_pixels(src.meta, 
-                                                                    deb_col_lat, 
+                                end_col_lat = area[1][1]
+                                row_deb, col_deb = latlon_to_pixels(src.meta,
+                                                                    deb_col_lat,
                                                                     deb_row_lon)
-                                row_end, col_end = latlon_to_pixels(src.meta, 
-                                                                    end_col_lat, 
+                                row_end, col_end = latlon_to_pixels(src.meta,
+                                                                    end_col_lat,
                                                                     end_row_lon)
                             except Exception as e:
                                 raise ValueError(f"Failed to convert geographic coordinates to pixel coordinates: {str(e)}")
-                                            
-                            
+
+
                             nb_lig=row_end-row_deb
-                            nb_col=col_end-col_deb                            
+                            nb_col=col_end-col_deb
                             offset_col = col_deb
                             offset_lig = row_deb
                             window = windows.Window(offset_col, offset_lig, nb_col, nb_lig)
                             with rio.open(source_name) as src:
                                 self.__meta=src.meta.copy()
                                 self.image = src.read(window=window).copy()
-        
+
                             self.__meta.update({
                                 "height": window.height,
                                 "width": window.width,
                                 "transform": windows.transform(window, src.transform)
                             })
-                            
-                            self.__georef = True
-                            
-    
 
-    
+                            self.__georef = True
+
+
+
+
             # Case 3: Creating from provided data and metadata
             elif meta is not None:
                 self.__meta = meta
@@ -2395,14 +2395,14 @@ class Geoimage:
                     self.__georef = False
                 else:
                     self.__georef = True
-    
+
                 if data is not None:
                     # Ensure data is in the correct shape (bands, rows, cols)
                     if len(data.shape) == 2:
                         self.image = data.reshape((1, data.shape[0], data.shape[1]))
                     else:
                         self.image = data
-    
+
                     # Validate dimensions match metadata
                     if ((meta['height'] != self.image.shape[1]) or
                         (meta['width'] != self.image.shape[2]) or
@@ -3471,7 +3471,7 @@ class Geoimage:
             if check_dict(names):
                 self.__namesgiven = True
                 self.names = reorder_dict_by_values(names)
-            else: 
+            else:
                 raise ValueError(f"Error: inconsistent names given {names}")
 
         if self.__history is not False:
@@ -3820,6 +3820,37 @@ class Geoimage:
         to see how many classes are present.
         """
         return np.unique(self.image)
+
+    def isnan(self):
+        """
+        Return a boolean mask indicating which pixels in the image
+        contain NaN values.
+
+        Returns
+        -------
+        Geoimage
+            A new `Geoimage` object with test of nan values
+
+        Examples
+        --------
+        >>> im_isnan = image.isnan()
+
+        Notes
+        -----
+        This method does not modify the current object. Instead, it returns
+        a new `Geoimage` instance. The resulting boolean raster can be used
+        as an independent mask or combined with logical operations to filter
+        values.
+        """
+        data = np.isnan(self.image)
+        meta = self.__meta.copy()
+
+        meta['dtype'] = "bool"
+        meta['nodata'] = None
+        names = {f"{k}_isnan": v for k, v in self.names.items()}
+        return Geoimage(data=data,
+                      meta=meta, names=names,
+                      georef=self.__georef)
 
 
     def abs(self, axis=None, inplace=False):
@@ -5504,7 +5535,7 @@ class Geoimage:
         meta = self.__meta.copy()
         meta['count'] = image.shape[0]
         meta['dtype'] = str(image.dtype)
-        
+
 
         # Create the new Geoimage
         geoim = Geoimage(data=image, meta=meta, names=names, georef=self.__georef, history=self.__history)
@@ -6481,6 +6512,8 @@ class Geoimage:
         """
         Apply a pre-trained machine learning model to the image.
 
+        NOTE: Will be obsolete in future versions, use `resample`instead
+
         This method applies a machine learning model (such as one created by kmeans())
         to the image data, creating a new classified or transformed image.
 
@@ -6515,7 +6548,7 @@ class Geoimage:
         >>> from sklearn.ensemble import RandomForestClassifier
         >>> clf = RandomForestClassifier(max_depth=2, random_state=0)
         >>> clf.fit(X, y)
-        >>> image.apply_ML_model(clf)
+        >>> result = image.apply_ML_model(clf)
 
 
         Notes
@@ -6573,6 +6606,105 @@ class Geoimage:
                 im_classif.__listhistory.append(f'\t Using bands: {bands}')
 
         return im_classif
+
+
+    def predict(self, model, bands=None):
+        """
+        Apply a pre-trained machine learning model to the image.
+
+        This method applies a machine learning model (such as one created by kmeans())
+        to the image data, creating a new classified or transformed image.
+
+        Parameters
+        ----------
+        model : scikit model or tuple
+            If tuple, it must containi (ml_model, scaler) where:
+            - ml_model: A trained scikit-learn model with a predict() method
+            - scaler: The scaler used for standardization (or None if not used)
+        bands : list of str or None, optional
+            List of bands to use as input for the model. If None, all bands are used.
+            Default is None.
+
+        Returns
+        -------
+        Geoimage
+            A new Geoimage containing the model output
+
+        Examples
+        --------
+        >>> # Train a model on one image and apply to another
+        >>> classified, model = reference_image.kmeans(n_clusters=5)
+        >>> new_classified = target_image.predict(model)
+        >>> new_classified.visu(colorbar=True, cmap='viridis')
+        >>>
+        >>> # Train on specific bands and apply to the same bands
+        >>> _, model = image.kmeans(bands=["NIR", "Red"], n_clusters=3)
+        >>> result = image.predict(model, bands=["NIR", "Red"])
+        >>> result.save("classified.tif")
+        >>>
+        >>> # Apply a RF model trained of other data to a Geoimage
+        >>> from sklearn.ensemble import RandomForestClassifier
+        >>> clf = RandomForestClassifier(max_depth=2, random_state=0)
+        >>> clf.fit(X, y)
+        >>> result = image.predict(clf)
+
+
+        Notes
+        -----
+        - The model must have been trained on data with the same structure as what it's being applied to (e.g., same number of bands)
+        - If a scaler was used during training, it will be applied before prediction
+        - This method is useful for:
+        - Applying a classification model to new images
+        - Ensuring consistent classification across multiple scenes
+        - Time-series analysis with consistent classification
+        """
+        if isinstance(model,tuple):
+            # Extract model and scaler from tuple
+            ml_model = model[0]
+            scaler = model[1]
+        else:
+            ml_model = model
+            scaler = None
+
+        # Convert image data to table format
+        tab_ori = self.numpy_table(bands=bands)
+
+        # Apply scaling if a scaler was provided
+        if scaler is not None:
+            tab_ori = scaler.transform(tab_ori)
+
+        # Apply the model to get predictions
+        outputs = ml_model.predict(tab_ori)
+
+        # Reshape predictions back to image format
+        outputs = table2image(outputs, self.shape)
+
+        # Create metadata for output image
+        meta = self.__meta.copy()
+
+        # Set band count based on output shape
+        if len(outputs.shape) == 2:
+            meta['count'] = 1
+        else:
+            meta['count'] = outputs.shape[0]
+
+        # Update data type
+        type_str = str(outputs.dtype)
+        meta['dtype'] = type_str
+
+        # Create and return new Geoimage with model outputs
+        im_classif = Geoimage(data=outputs, meta=meta, georef=self.__georef, history=self.__history)
+
+        if im_classif.__history is not False:
+            now = datetime.datetime.now()
+            now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+            model_type = type(ml_model).__name__
+            im_classif.__listhistory.append(f'[{now_str}] - Created using ML model: {model_type}')
+            if bands is not None:
+                im_classif.__listhistory.append(f'\t Using bands: {bands}')
+
+        return im_classif
+
 
     def adapt(self, imt, tab_source = None, nb=1000, mapping='gaussian', reg_e=1e-1, mu=1e0, eta=1e-2, bias=False, max_iter=20, verbose=True, sigma=1, inplace=False):
         """
@@ -7309,6 +7441,8 @@ class Geoimage:
         """
         Resample the image to a different resolution.
 
+        NOTE: Will be obsolete in future versions, use `resample`instead
+
         This method changes the spatial resolution of the image by resampling the pixel values.
         The resampling process creates a new grid of pixels at the target resolution and
         interpolates values from the original grid.
@@ -7403,6 +7537,107 @@ class Geoimage:
                 raise RuntimeError(f"Resampling failed: {str(e)}") from e
         else:
             return(self.__apply_resampling(final_resolution, dest_name=dest_name, method=method))
+
+    def resample(self, final_resolution, dest_name=None, inplace=False, method='cubic_spline', update_history=True):
+        """
+        Resample the image to a different resolution.
+
+        This method changes the spatial resolution of the image by resampling the pixel values.
+        The resampling process creates a new grid of pixels at the target resolution and
+        interpolates values from the original grid.
+
+        Parameters
+        ----------
+        final_resolution : float
+            The target resolution in the image's coordinate system units (typically meters or degrees).
+            A smaller value results in a higher-resolution (larger) image.
+
+        dest_name : str, optional
+            Path to save the resampled image. If None, the image is not saved.
+            Default is None.
+
+        inplace : bool, default False
+            If False, return a copy. Otherwise, do the resampling in place and return None.
+
+
+        method : str, optional
+            Resampling algorithm to use. Options include:
+
+            - 'cubic_spline' (default): High-quality interpolation, good for continuous data
+
+            - 'nearest': Nearest neighbor interpolation, preserves original values, best for categorical data
+
+            - 'bilinear': Linear interpolation between points, faster than cubic
+
+            - 'cubic': Standard cubic interpolation
+
+            - 'lanczos': High-quality downsampling
+
+            - 'average': Takes the average of all contributing pixels, useful for downsampling
+
+        update_history : bool, optional
+            Whether to update the image processing history. Default is True.
+
+        Returns
+        -------
+        Geoimage
+            A copy of the resampled image or None if `inplace=True`
+
+        Examples
+        --------
+        >>> # Resample to 30 meter resolution
+        >>> image_resampled = image.resample(30)
+        >>> print(f"New resolution: {image.resolution}")
+        >>>
+        >>> # Resample using nearest neighbor (best for categorical data)
+        >>> classified_image_resampled = classified_image.resample(10, method='nearest')
+        >>>
+        >>> # Resample and save the result
+        >>> image_resampled = image.resample(20, dest_name='resampled_20m.tif')
+        >>>
+        >>>
+        >>> # Resample directly the image to 30 meter resolution
+        >>> image.resample(30, inplace=True)
+        >>> print(f"New resolution: {image.resolution}")
+        >>>
+        >>> # Resample directly the image using nearest neighbor (best for categorical data)
+        >>> classified_image.resample(10, method='nearest', inplace=True)
+        >>>
+        >>> # Resample and save the result
+        >>> image.resample(20, dest_name='resampled_20m.tif', inplace=True)
+
+        Notes
+        -----
+        - Same function as `resampling` but rather prefer this one
+        - When upsampling (to higher resolution), no new information is created;
+        the function only interpolates between existing pixels
+        - When downsampling (to lower resolution), information is lost
+        - The choice of resampling method is important:
+        - For continuous data (e.g., elevation, reflectance): 'cubic_spline', 'bilinear', or 'cubic'
+        - For categorical data (e.g., land classifications): 'nearest' or 'mode'
+        - This method changes the dimensions (shape) of the image
+        """
+        if inplace:
+            try:
+                original_resolution = self.resolution
+                self.image, self.__meta = resampling(self.image, final_resolution,
+                                                    dest_name=dest_name,
+                                                    method=method, channel_first=True,
+                                                    meta=self.__meta, names = self.names)
+                self.__update()
+
+                if self.__history is not False and update_history:
+                    now = datetime.datetime.now()
+                    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+                    self.__listhistory.append(f'[{now_str}] - Resampled from {original_resolution:.2f} to {final_resolution:.2f} using {method} method')
+                    if dest_name is not None:
+                        self.__listhistory.append(f'\t Resampled image saved in: {dest_name}')
+
+            except Exception as e:
+                raise RuntimeError(f"Resampling failed: {str(e)}") from e
+        else:
+            return(self.__apply_resampling(final_resolution, dest_name=dest_name, method=method))
+
 
     def crop(self, deb_row_lon, end_row_lon, deb_col_lat, end_col_lat, dest_name=None, pixel=True, inplace=False):
         """
