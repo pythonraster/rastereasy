@@ -29,7 +29,7 @@ bibliography: paper.bib
 
 # Summary
 
-Working with remote sensing data often involves managing large, multi-band georeferenced rasters with varying spatial resolutions, extents, and coordinate reference systems [@mamatov2024geospatial]. Established libraries such as `rasterio` and `GDAL` [@garrard2016geoprocessing; @gillies2013rasterio] provide extensive capabilities for these tasks, but they can be verbose and require a solid understanding of geospatial concepts such as projections, geotransforms, and metadata handling. For users whose primary expertise lies outside GIS—such as data scientists, ecologists, agronomists, or climate researchers—this steep learning curve can hinder the rapid development of operational workflows.
+Working with remote sensing data often involves managing large, multi-band georeferenced rasters with varying spatial resolutions, extents, and coordinate reference systems [@mamatov2024geospatial]. Established libraries such as `rasterio`, `Raster Forge`, `PODPAC`, `EarthPy` or `GDAL` [@garrard2016geoprocessing; @gillies2013rasterio; @oliveira2024raster; @ueckermann2020podpac; @Wasser2019EarthPy] provide extensive functionality for these tasks, but they can be verbose and require a solid understanding of geospatial concepts such as projections, geotransforms, and metadata management. While efficient, many of these libraries are often specialized in a specific sub-task (e.g., visualization, array manipulation, or graphical interfaces) and may not be fully suited to users whose primary expertise lies outside GIS—such as data scientists, ecologists, agronomists, or climate researchers. This steep learning curve can slow down the development of operational workflows.
 
 **rastereasy** is a Python library designed to bridge this gap by providing a high-level, human-readable interface for common geospatial raster and vector operations (e.g., *.tif, *.jp2, *.shp) [@ritter1997geotiff; @mamatov2024geospatial]. Built on well-established libraries including `rasterio`, `numpy`, `shapely`, `geopandas`, and `scikit-learn` [@gillies2013rasterio; @harris2020array; @gillies2013shapely; @jordahl2021geopandas; @kramer2016scikit], it enables users to perform typical GIS tasks—such as resampling, cropping, reprojection, stacking, clipping rasters with shapefiles, or rasterizing vector layers—in just a few lines of code. Some basic Machine Learning functionalities (clustering, fusion) are also implemented.
 
@@ -73,26 +73,40 @@ The core class of **rastereasy** is **GeoImage**, which wraps a raster as a `num
 ```python
 import rastereasy
 
-# Load an image
+# Load an entire image
 img = rastereasy.Geoimage("example.tif")
 
 # Print metadata
 img.info()
 
+# Load a smal window of the image
+deb_row=35
+end_row=712
+deb_col=40
+end_col=450
+area_pixel=((deb_row,end_row),(deb_col,end_col))
+image=rastereasy.Geoimage("example",area=area_pixel)
+
+# Print metadata
+img.info()
+
+
 # Resample to 2m resolution
-img_resampled = img.resampling(2)
+img_resampled = img.resample(2)
 
 # This can also be done in inplace mode
-img.resampling(2, inplace=True)
+img.resample(2, inplace=True)
 
 # Reproject to EPSG:4326
 img_reprojected = img.reproject("EPSG:4326")
 
 # Compute NDVI
-r=img.select_bands(4)
-nir=img.select_bands(8)
+r=img.select_bands(['4'])
+nir=img.select_bands(['8'])
 ndvi = (nir - r) / (nir + r)
 
+# Change the name of the bands
+ndvi.change_names({'ndvi':1})
 
 # Save the processed image
 ndvi.save("ndvi.tif")
@@ -172,7 +186,25 @@ Here are  the generated images:
 
 ![Examples of band harmonization with  rastereasy](./harmonization.jpg "harmonization of bands")
 
+## Filters
 
+Most classical filters (gaussian, laplacian, sobel, median) as well as user-defined generic filters can be performed. Here are some examples.
+
+```python
+import rastereasy
+
+name_im='image.tif'
+image=rastereasy.Geoimage(name_im)
+
+# Gaussian filter
+image_filtered_gaussian = image.filter("gaussian",sigma=8)
+
+# Generic filter
+import numpy as np
+blur_kernel = np.ones((9, 9)) / (81)
+image_filtered_generic = image.filter(method="generic", kernel=blur_kernel)
+
+```
 
 
 For additional functionalities such as spectral plots, rasterization, harmonization, clustering, or classification fusion, see the [rastereasy documentation](https://rastereasy.github.io/).
@@ -183,15 +215,16 @@ For additional functionalities such as spectral plots, rasterization, harmonizat
 
 # Performance and Scalability
 
-`rastereasy` is designed as a high-level wrapper around efficient geospatial libraries such as `rasterio`, `numpy`, and `geopandas`. In its current implementation, the default behavior is to load full rasters into memory.
+`rastereasy` is designed as a high-level wrapper around efficient geospatial libraries such as `rasterio`, `numpy`, and `geopandas`. In its current implementation, the default behavior is either to load full rasters into memory and it also supports windowed reading via the underlying `rasterio`  API, allowing users to read and process only subsets of rasters without loading entire files into memory.
+
 While this is convenient for small to medium-sized datasets, it can become a limiting factor when working with very large georeferenced images (e.g., > 10 GB).
 
-To handle larger datasets, future versions of `rastereasy`  will support windowed reading via the underlying `rasterio`  API, allowing users to read and process only subsets of rasters without loading entire files into memory. Currently, most operations are single-threaded and executed in memory; planned enhancements include lazy loading (processing data on demand) and parallel processing (e.g., for tiling, reprojection, or large mosaics) to improve scalability.
+Currently, most operations are single-threaded and executed in memory; planned enhancements include lazy loading (processing data on demand) and parallel processing (e.g., for tiling, reprojection, or large mosaics) to improve scalability.
 
 # Documentation and community guidelines
 
 Full documentation, including numerous Jupyter Notebook tutorials, is available at:
-https://github.com/pythonraster/rastereasy
+https://rastereasy.github.io/
 
 Contribution guidelines and issue reporting instructions are provided in the repository to encourage community-driven development. We welcome contributions of all types, including:
 
@@ -203,7 +236,7 @@ Contribution guidelines and issue reporting instructions are provided in the rep
 
 - Community support: engage in discussions, answer questions from other users, and help maintain a collaborative and respectful environment
 
-All contributors are expected to adhere to the [Contributor Covenant](https://www.contributor-covenant.org/) Code of Conduct, [version 1.4](http://contributor-covenant.org/version/1/4), ensuring a welcoming and inclusive community.
+All contributors are expected to adhere to the [Contributor Covenant](https://www.contributor-covenant.org/) Code of Conduct, [version 1.4](https://www.contributor-covenant.org/version/1/4/code-of-conduct/), ensuring a welcoming and inclusive community.
 
 
 # Acknowledgments
