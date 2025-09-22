@@ -26,7 +26,7 @@ affiliations:
 date: 03 June 2025
 bibliography: paper.bib
 ---
-
+ 
 # Summary
 
 Working with remote sensing data often involves managing large, multi-band georeferenced rasters with varying spatial resolutions, extents, and coordinate reference systems [@mamatov2024geospatial]. Established libraries such as `rasterio`, `Raster Forge`, `PODPAC`, `EarthPy` or `GDAL` [@garrard2016geoprocessing; @gillies2013rasterio; @oliveira2024raster; @ueckermann2020podpac; @Wasser2019EarthPy] provide extensive functionality for these tasks, but they can be verbose and require a solid understanding of geospatial concepts such as projections, geotransforms, and metadata management. While efficient, many of these libraries are often specialized in a specific sub-task (e.g., visualization, array manipulation, or graphical interfaces) and may not be fully suited to users whose primary expertise lies outside GIS—such as data scientists, ecologists, agronomists, or climate researchers. This steep learning curve can slow down the development of operational workflows.
