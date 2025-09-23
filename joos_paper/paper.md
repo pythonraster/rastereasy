@@ -36,7 +36,7 @@ Working with remote sensing data often involves managing large, multi-band geore
 By abstracting away much of the underlying technical complexity, **rastereasy** makes geospatial processing directly accessible within Python scripts. It is particularly suited for analysts and machine learning practitioners who need to integrate geospatial data handling into their workflows without deep GIS expertise, while also helping experienced geographers prototype more quickly. Beyond core raster operations, it includes utilities for harmonizing multi-source imagery, performing clustering and domain adaptation, and preparing datasets for downstream analysis.
 
 
-With its current implementation, **rastereasy** provides a solid foundation for further development and integration into the Python geospatial ecosystem. The source code is available at [https://github.com/pythonraster/rastereasy](https://github.com/pythonraster/rastereasy) and a documentation [https://rastereasy.github.io/](https://rastereasy.github.io/).
+With its current implementation, **rastereasy** provides a solid foundation for further development and integration into the Python geospatial ecosystem.
 
 
 # Statement of need
@@ -108,22 +108,6 @@ While this is convenient for small to medium-sized datasets, it can become a lim
 
 Currently, most operations are single-threaded and executed in memory; planned enhancements include lazy loading (processing data on demand) and parallel processing (e.g., for tiling, reprojection, or large mosaics) to improve scalability.
 
-# Documentation and community guidelines
-
-Full documentation, including numerous Jupyter Notebook tutorials, is available at:
-https://rastereasy.github.io/
-
-Contribution guidelines and issue reporting instructions are provided in the repository to encourage community-driven development. We welcome contributions of all types, including:
-
-- Bug reports and feature requests: please use the GitHub Issues section, providing clear descriptions, example data, and reproducible steps when possible
-
-- Code contributions: fork the repository, create a feature branch, and submit a pull request with detailed explanations and tests for new functionality
-
-- Documentation improvements: suggestions to improve tutorials, add examples, or clarify function descriptions are highly valued
-
-- Community support: engage in discussions, answer questions from other users, and help maintain a collaborative and respectful environment
-
-All contributors are expected to adhere to the [Contributor Covenant](https://www.contributor-covenant.org/) Code of Conduct, [version 1.4](https://www.contributor-covenant.org/version/1/4/code-of-conduct/), ensuring a welcoming and inclusive community.
 
 
 # Acknowledgments
