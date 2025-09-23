@@ -4,7 +4,7 @@
 Rastereasy
 ==========
 
-Click on the logo to access the complete documentation.
+Click on the logo to access the complete documentation with many examples and notebooks.
 
 [![Click here for a complete documentation](./illus/logo.png)](https://rastereasy.github.io/)
 
