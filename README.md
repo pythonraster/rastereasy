@@ -1,6 +1,13 @@
 
 
 
+Rastereasy
+==========
+
+[![Click here for a complete documentation](./illus/logo.png)](https://rastereasy.github.io/)
+
+
+
 
 Introduction
 ============
