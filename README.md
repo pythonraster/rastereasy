@@ -43,7 +43,7 @@ Here's a quick example of what you can do with rastereasy:
  image.colorcomp(['4', '3', '2'])
 
  # Resample and reproject
- image_resampled = image.resampling(2)
+ image_resampled = image.resample(2)
  image_reproject = image.reproject("EPSG:4326")
 
  # Save the processed image
@@ -160,13 +160,13 @@ This project is licensed under the MIT License – see the [LICENCE](https://git
 
 This new version introduces several new features and improvements focused on dimensionality reduction, visualization, and overall consistency across the library.
 
-** New features
+**New features**
 
 - Dimensionality reduction: Added support for PCA, t-SNE, and LLE methods for feature extraction and visualization.
 
 - Visualization: Added a `zoom` parameter to all visualization functions (.visu(), .colorcomp(), .plot_spectra()), allowing users to focus on specific regions of interest.
 
-** Improvements
+**Improvements**
 
 - Crop function harmonization: The `crop()` function has been standardized.
 It now accepts either:
@@ -177,7 +177,7 @@ It now accepts either:
 
 - Consistent documentation: Updated comments and docstrings to ensure consistency with the `predict()` function and other ML-related methods.
 
-** Bug fixes
+**Bug fixes**
 
 - Fixed a bug occurring when opening windowed versions of images that caused incorrect band naming.
 
