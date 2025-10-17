@@ -5,6 +5,9 @@ Contains the main Geoimage class and utility functions for raster processing.
 
 import os
 # Google Colab detection and setup
+import matplotlib
+
+
 try:
     import google.colab
     IN_COLAB = True
@@ -17,6 +20,7 @@ try:
         os.system('pip install ipympl')
 except ImportError:
     IN_COLAB = False
+    matplotlib.use('Qt5Agg') #  'Qt5Agg' 'TkAgg'
 end_collect = False  # Flag used for collecting spectra
 
 # Standard library imports
@@ -33,7 +37,6 @@ from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_webagg_core import NavigationToolbar2WebAgg
-import matplotlib
 
 # Rasterio and geospatial imports
 import rasterio as rio
@@ -1245,7 +1248,7 @@ class Visualizer:
     @staticmethod
     def plot_spectra(im, bands=None, fig_size=(15, 5), percentile=2, title='',
                      title_im="Original image (click outside to stop)",
-                     title_spectra="Spectra", xlabel="Bands", ylabel="Value"):
+                     title_spectra="Spectra", xlabel="Bands", ylabel="Value", offset_i=0,offset_j=0):
         """
         Plots and extracts spectral values from user-selected pixels on a multispectral image.
 
@@ -1277,6 +1280,12 @@ class Visualizer:
         ylabel : str, optional
             Y-axis label for the spectra curves plot.
             Default is "Value".
+        offset_i : int, optional
+            Offset to add to i coordinates (in case of a zoom)
+            Default is 0.
+        offset_j : int, optional
+            Offset to add to j coordinates (in case of a zoom)
+            Default is 0.
 
         Returns
         -------
@@ -1308,7 +1317,6 @@ class Visualizer:
         def on_end_collect(series, val_i, val_j):
             # Code to be executed after the user finishes selecting pixels
             print("User has finished selecting pixels.")
-
         series, val_i, val_j, end_collect = plot_clic_spectra(
             im.numpy_channel_last(),
             imc,
@@ -1318,7 +1326,10 @@ class Visualizer:
             title_spectra=title_spectra,
             xlabel=xlabel,
             ylabel=ylabel,
-            callback=on_end_collect
+            callback=on_end_collect,
+            offset_i=offset_i,
+            offset_j=offset_j,
+            colab=IN_COLAB
         )
 
         return series, val_i, val_j
@@ -1733,14 +1744,14 @@ def files2stack(imagefile_path, resolution=None, names="origin", dest_name=None,
             message="im %s has %d bands"%(imagefile_path[0],im.nb_bands)
             warnings.warn(message,category=UserWarning)
         if im.resolution != resolution:
-            im.resampling(resolution, inplace=True)
+            im.resample(resolution, inplace=True)
 
         # Process remaining images
         for i in range(len(imagefile_path) - 1):
             # Load and resample next image
             im_tmpo = Geoimage(imagefile_path[i + 1])
             if im_tmpo.resolution != resolution:
-                im_tmpo.resampling(resolution, inplace=True)
+                im_tmpo.resample(resolution, inplace=True)
 
             if im_tmpo.nb_bands!=1:
                 message="im %s has %d bands"%(imagefile_path[i + 1],im_tmpo.nb_bands)
@@ -1842,8 +1853,8 @@ def extract_common_areas(im1, im2, resolution='min', projection=None):
             else:
                 raise ValueError(f'Error: resolution {resolution} unknown. Use "min", "max", or None.')
 
-            im1 = im1.resampling(res)
-            im2 = im2.resampling(res)
+            im1 = im1.resample(res)
+            im2 = im2.resample(res)
 
     # Get corner coordinates
     lat1_d, lon1_d = im1.pixel2latlon(0, 0)
@@ -1860,8 +1871,8 @@ def extract_common_areas(im1, im2, resolution='min', projection=None):
 
 
     # Crop images to common bounds
-    im1common = im1.crop(bound_lon_d, bound_lon_e, bound_lat_d, bound_lat_e, pixel=False)
-    im2common = im2.crop(bound_lon_d, bound_lon_e, bound_lat_d, bound_lat_e, pixel=False)
+    im1common = im1.crop(area=((bound_lon_d, bound_lon_e), (bound_lat_d, bound_lat_e)), pixel=False)
+    im2common = im2.crop(area=((bound_lon_d, bound_lon_e), (bound_lat_d, bound_lat_e)), pixel=False)
 
     # Adjust for srowht differences in size after reprojection/resampling
     if adapt:
@@ -1926,8 +1937,8 @@ def extend_common_areas(image1, image2, nodata_value=0, resolution='min', projec
         else:
             raise ValueError(f'Error: resolution {resolution} unknown. Use "min" or "max".')
 
-        image1 = image1.resampling(res)
-        image2 = image2.resampling(res)
+        image1 = image1.resample(res)
+        image2 = image2.resample(res)
 
     # Get the image data and metadata
     im1 = image1.image
@@ -2324,11 +2335,6 @@ class Geoimage:
 
 
 
-
-
-
-
-
                     else:
                         if extent=='pixel':
                             # coordinates in pixel
@@ -2341,6 +2347,16 @@ class Geoimage:
                             with rio.open(source_name) as src:
                                 self.__meta=src.meta.copy()
                                 self.image = src.read(window=window).copy()
+                                tags = src.tags()
+                                if "EXTRA_TAGS" in tags:
+                                    try:
+                                        extra_tags = json.loads(tags["EXTRA_TAGS"])
+                                    except json.JSONDecodeError:
+                                        extra_tags = tags["EXTRA_TAGS"]
+                                # If not, usual names
+                                if extra_tags is not None:
+                                    if not (check_dict(extra_tags) and len(extra_tags)==self.__meta['count']):
+                                        extra_tags = None
 
                             self.__meta.update({
                                 "height": window.height,
@@ -2349,8 +2365,10 @@ class Geoimage:
                             })
 
                             self.__georef = True
+                            # Check if previous names have been saved
+
                         else:
-                            # coordinates in pixel
+                            # coordinates in latlon
                             # area=((deb_row,end_row),(deb_col,end_col))
                             src=rio.open(source_name)
                             try:
@@ -2376,15 +2394,24 @@ class Geoimage:
                             with rio.open(source_name) as src:
                                 self.__meta=src.meta.copy()
                                 self.image = src.read(window=window).copy()
+                                tags = src.tags()
+                                if "EXTRA_TAGS" in tags:
+                                    try:
+                                        extra_tags = json.loads(tags["EXTRA_TAGS"])
+                                    except json.JSONDecodeError:
+                                        extra_tags = tags["EXTRA_TAGS"]
+                                # If not, usual names
+                                if extra_tags is not None:
+                                    if not (check_dict(extra_tags) and len(extra_tags)==self.__meta['count']):
+                                        extra_tags = None
 
-                            self.__meta.update({
-                                "height": window.height,
-                                "width": window.width,
-                                "transform": windows.transform(window, src.transform)
-                            })
+                                self.__meta.update({
+                                    "height": window.height,
+                                    "width": window.width,
+                                    "transform": windows.transform(window, src.transform)
+                                })
 
-                            self.__georef = True
-
+                                self.__georef = True
 
 
 
@@ -2481,7 +2508,7 @@ class Geoimage:
         else:
 #            self.__extent_latlon = [0, self.shape[1], 0, self.shape[0]]
             self.__extent_latlon = [0, self.shape[1],  self.shape[0], 0]
-            self.__extent_pixels = [0, self.shape[1], 0, self.shape[0]]
+            self.__extent_pixels = [0, self.shape[1], self.shape[0], 0]
 
         # Validate number of bands
         if self.__meta['count'] != len(self.names):
@@ -3498,7 +3525,7 @@ class Geoimage:
         --------
         >>> image = Geoimage("landsat_image.tif")
         >>> image.activate_history()
-        >>> image.resampling(30,inplace=True)  # This operation will be tracked in history
+        >>> image.resample(30,inplace=True)  # This operation will be tracked in history
         >>> image.info()  # The history section will show the resampling operation
 
         See Also
@@ -3523,7 +3550,7 @@ class Geoimage:
         Examples
         --------
         >>> image.deactivate_history()
-        >>> image.resampling(15)  # This operation won't be tracked in history
+        >>> image.resample(15)  # This operation won't be tracked in history
 
         See Also
         --------
@@ -3545,7 +3572,7 @@ class Geoimage:
         --------
         >>> original = Geoimage("landsat_image.tif")
         >>> duplicate = original.copy()
-        >>> duplicate.resampling(15,inplace=True)  # This won't affect the original image
+        >>> duplicate.resample(15,inplace=True)  # This won't affect the original image
 
         Notes
         -----
@@ -4423,6 +4450,116 @@ class Geoimage:
         label : str or list of str, optional
             The labels for the histogram. If not provided, default labels will be created.
 
+        zoom : tuple, optional
+            To plot hist  only on a window of the image
+                If based on pixel coordinates, you must indicate
+                - the row/col coordinades of
+                        the north-west corner (deb_row,deb_col)
+                - the row/col coordinades of
+                        the south-east corner (end_row,end_col)
+                in a tuple  `zoom = ((deb_row,end_row),(deb_col,end_col))`
+
+                If based on latitude/longitude coordinates, you must indicate
+                - the lat/lon coordinades of the north-west corner (lat1,lon1)
+                - the lat/lon coordinades of the south-east corner (lat2,lon2)
+                `zoom = ((lon1,lon2),(lat1,lat2))`
+            If not provide, plot hist of the entire image
+
+        pixel : bool, optional
+            Coordinate system flag, if zoom is given:
+            - If True: Coordinates are interpreted as pixel indices
+            - If False: Coordinates are interpreted as geographic coordinates
+            Default is True.
+
+
+        **args : dict, optional
+            Additional keyword arguments passed to matplotlib's hist function.
+
+        Returns
+        -------
+        None
+            This method displays the histogram(s) but doesn't return any values.
+
+        Examples
+        --------
+        >>> # Display histograms for all bands
+        >>> image.hist(bins=100)
+        >>>
+        >>> # Display histogram for a single band with customization
+        >>> image.hist(bands="NIR", bins=150, histtype='stepfilled',
+        >>>            title="NIR Band Distribution", xmin=0, xmax=10000)
+        >>>
+        >>> # Superpose histograms from multiple bands
+        >>> image.hist(bands=["NIR", "R", "G"], bins=100, superpose=True,
+        >>>            alpha=0.7, fig_size=(10, 6))
+        >>>
+        >>> # Superpose histograms on a zoom from multiple bands
+        >>> image.hist(bands=["NIR", "R", "G"], bins=100, superpose=True,
+        >>>            alpha=0.7, fig_size=(10, 6), zoom = ((40,150),(100,300)))
+
+        Notes
+        -----
+        This method is based on rasterio's show_hist function and supports most
+        of matplotlib's histogram customization options. It's useful for understanding
+        the distribution of values in your image and identifying potential issues like
+        saturation, quantization, or outliers.
+        """
+        args_for_hist = {key: value for key, value in args.items() if key not in ['zoom', 'pixel']}
+        if "zoom" in args:
+            zoom=args['zoom']
+            if "pixel" in args:
+                pixel= args['pixel']
+            else:
+                pixel=True
+            im_hist=self.crop(area=zoom,pixel=pixel)
+            im_hist.__hist_complet(**args_for_hist)
+        else:
+            self.__hist_complet(**args_for_hist)
+
+
+    def __hist_complet(self, **args):
+        """
+        Display histograms of the image data.
+
+        This method provides a flexible way to visualize the distribution of pixel values
+        in one or more bands of the image. It supports various customization options for
+        the histogram display.
+
+        Parameters
+        ----------
+        bands : str, int, list, optional
+            The bands to visualize. If not specified, all bands are included.
+            This can be band names (e.g., ["NIR", "R", "G"]) or indices (e.g., [4, 3, 2]).
+
+        superpose : bool, optional
+            If True, all histograms are plotted on the same figure. If False (default),
+            each band gets its own separate histogram figure.
+
+        bins : int, optional
+            The number of bins for computing the histogram. Default is 100.
+
+        xmin : float, optional
+            The minimum value to plot on the x-axis. Values lower than this won't be displayed.
+
+        xmax : float, optional
+            The maximum value to plot on the x-axis. Values higher than this won't be displayed.
+
+        title : str, optional
+            The title for the histogram figure.
+
+        histtype : str, optional
+            The type of histogram to draw. Default is 'stepfilled'.
+            Other options include 'bar', 'step', 'barstacked', etc.
+
+        alpha : float, optional
+            The transparency of the histogram bars (0.0 to 1.0). Default is 0.6.
+
+        fig_size : tuple, optional
+            The size of the figure in inches as (width, height). Default is DEF_FIG_SIZE.
+
+        label : str or list of str, optional
+            The labels for the histogram. If not provided, default labels will be created.
+
         **args : dict, optional
             Additional keyword arguments passed to matplotlib's hist function.
 
@@ -4567,7 +4704,7 @@ class Geoimage:
                     band_indices = [self.names[band] - 1 for band in bands]
                     show_hist(data[band_indices, :, :], **args)
 
-    def colorcomp(self, bands=None, dest_name='', percentile=2, fig_size=DEF_FIG_SIZE, title='', extent="latlon"):
+    def colorcomp(self, bands=None, dest_name='', percentile=2, fig_size=DEF_FIG_SIZE, title='', extent="latlon", zoom=None, pixel=True):
         """
         Create and display a color composite image from selected bands.
 
@@ -4606,6 +4743,27 @@ class Geoimage:
             - 'pixel': Use pixel coordinates
             - None: Don't show coordinate axes
 
+        zoom : tuple, optional
+            To plot  only a window of the image
+                If based on pixel coordinates, you must indicate
+                - the row/col coordinades of
+                        the north-west corner (deb_row,deb_col)
+                - the row/col coordinades of
+                        the south-east corner (end_row,end_col)
+                in a tuple  `zoom = ((deb_row,end_row),(deb_col,end_col))`
+
+                If based on latitude/longitude coordinates, you must indicate
+                - the lat/lon coordinades of the north-west corner (lat1,lon1)
+                - the lat/lon coordinades of the south-east corner (lat2,lon2)
+                `zoom = ((lon1,lon2),(lat1,lat2))`
+            If not provide, perform on the entire image
+
+        pixel : bool, optional
+            Coordinate system flag, if zoom is given:
+            - If True: Coordinates are interpreted as pixel indices
+            - If False: Coordinates are interpreted as geographic coordinates
+            Default is True.
+
         Returns
         -------
         None
@@ -4625,8 +4783,8 @@ class Geoimage:
         >>> # Create a color-infrared composite (vegetation appears red)
         >>> image.colorcomp(bands=["NIR", "R", "G"], title="Color-Infrared Composite")
         >>>
-        >>> # Create and save a false color composite
-        >>> image.colorcomp(bands=["SWIR1", "NIR", "G"], dest_name="false_color.tif")
+        >>> # Zoom and save a false color composite
+        >>> image.colorcomp(bands=["SWIR1", "NIR", "G"], dest_name="false_color.tif",zoom=((100,300),(200,400)))
         >>>
         >>> # Change the contrast stretch
         >>> image.colorcomp(bands=["R", "G", "B"], percentile=5)  # More aggressive stretch
@@ -4641,11 +4799,11 @@ class Geoimage:
         """
         # Validate extent parameter
         if extent == 'pixel':
-            extent = self.__extent_pixels
+            extent_plot = self.__extent_pixels
         elif extent == 'latlon':
-            extent = self.__extent_latlon
+            extent_plot = self.__extent_latlon
         elif extent is None:
-            extent = None
+            extent_plot = None
         else:
             raise ValueError("Invalid extent value. Use 'pixel', 'latlon', or None.")
 
@@ -4656,11 +4814,11 @@ class Geoimage:
             fig, ax = plt.subplots(figsize=fig_size)
             ax.set_title(title)
 
-            if extent is None:
+            if extent_plot is None:
                 ax.imshow(im, interpolation='nearest')
                 plt.axis('off')
             else:
-                ax.imshow(im, interpolation='nearest', extent=extent)
+                ax.imshow(im, interpolation='nearest', extent=extent_plot)
 
             plt.show()
 
@@ -4698,12 +4856,31 @@ class Geoimage:
             if not(set1 <= set2):
                 raise ValueError(f"Error: the requested bands ({bands}) are not all "
                                f"in the available bands ({self.names})")
+            if zoom is not None:
+                imcrop = self.crop(area=zoom, pixel=pixel)
+                # Validate extent parameter
+                if extent == 'pixel':
+                    extent_plot = imcrop.__extent_pixels
+                    extent_plot[0] = imcrop.__extent_pixels[0]+zoom[1][0]
+                    extent_plot[1] = imcrop.__extent_pixels[1]+zoom[1][0]
+                    extent_plot[2] = imcrop.__extent_pixels[2]+zoom[0][0]
+                    extent_plot[3] = imcrop.__extent_pixels[3]+zoom[0][0]
 
-            # Create and display the color composite
-            colorcomp(self.image, bands, name_save=dest_name,
-                      names=self.names, percentile=percentile,
-                      channel_first=True, meta=self.__meta,
-                      fig_size=fig_size, title=title, extent=extent)
+                elif extent == 'latlon':
+                    extent_plot = imcrop.__extent_latlon
+                elif extent is None:
+                    extent_plot = None
+                else:
+                    raise ValueError("Invalid extent value. Use 'pixel', 'latlon', or None.")
+                colorcomp(imcrop.image, bands, name_save=dest_name,
+                          names=imcrop.names, percentile=percentile,
+                          channel_first=True, meta=imcrop.__meta,
+                          fig_size=fig_size, title=title, extent=extent_plot)
+            else:
+                colorcomp(self.image, bands, name_save=dest_name,
+                          names=self.names, percentile=percentile,
+                          channel_first=True, meta=self.__meta,
+                          fig_size=fig_size, title=title, extent=extent_plot)
 
 
     def convert_3bands(self, bands=None, dest_name=None, percentile=2, reformat_names=False):
@@ -4801,7 +4978,7 @@ class Geoimage:
 
     def plot_spectra(self, bands=None, fig_size=(15, 5), percentile=2, title='',
                      title_im="Original image (click outside to stop)",
-                     title_spectra="Spectra", xlabel="Bands", ylabel="Value"):
+                     title_spectra="Spectra", xlabel="Bands", ylabel="Value", zoom = None, pixel = None):
         """
         Interactive tool to explore and plot spectral values from user-selected pixels.
 
@@ -4844,6 +5021,144 @@ class Geoimage:
             Y-axis label for the spectral plot.
             Default is "Value".
 
+        zoom : tuple, optional
+            To visualize  only a window of the image
+                If based on pixel coordinates, you must indicate
+                - the row/col coordinades of
+                        the north-west corner (deb_row,deb_col)
+                - the row/col coordinades of
+                        the south-east corner (end_row,end_col)
+                in a tuple  `zoom = ((deb_row,end_row),(deb_col,end_col))`
+
+                If based on latitude/longitude coordinates, you must indicate
+                - the lat/lon coordinades of the north-west corner (lat1,lon1)
+                - the lat/lon coordinades of the south-east corner (lat2,lon2)
+                `zoom = ((lon1,lon2),(lat1,lat2))`
+            If not provide, visualize the entire image
+
+        pixel : bool, optional
+            Coordinate system flag, if zoom is given:
+            - If True: Coordinates are interpreted as pixel indices
+            - If False: Coordinates are interpreted as geographic coordinates
+            Default is True.
+
+
+
+        Returns
+        -------
+        tuple
+            A tuple containing:
+            - series : list of lists - Spectral values for each selected pixel
+            - pixel_i : list of int - Row coordinates of selected pixels
+            - pixel_j : list of int - Column coordinates of selected pixels
+
+        Examples
+        --------
+        >>> # Explore spectral signatures in the image
+        >>> spectra, rows, cols = image.plot_spectra()
+        >>> print(f"Selected {len(spectra)} pixels")
+        >>>
+        >>> # Customize the display
+        >>> spectra, rows, cols = image.plot_spectra(
+        >>>     bands=["NIR", "R", "G"],
+        >>>     title_im="Click on different vegetation types",
+        >>>     title_spectra="Vegetation Spectral Signatures")
+        >>>
+        >>> # Zoom of a part of the image
+        >>> spectra, rows, cols = image.plot_spectra(
+        >>>     bands=["NIR", "R", "G"],
+        >>>     zoom=((100,200),(100,400)),
+        >>>     title_im="Click on different vegetation types",
+        >>>     title_spectra="Vegetation Spectral Signatures")
+
+        Notes
+        -----
+        To end pixel selection, click outside the image area or on the "Finish" button.
+        This tool is particularly useful for:
+        - Exploring spectral differences between land cover types
+        - Identifying spectral anomalies
+        - Training classification algorithms
+        - Building spectral libraries
+        """
+
+
+        if zoom is None:
+            return self.__plot_spectra_entire(bands=bands,
+                               fig_size=fig_size,
+                               percentile=percentile,
+                               title=title,
+                               title_im=title_im,
+                               title_spectra=title_spectra,
+                               xlabel=xlabel,
+                               ylabel=ylabel)
+        else:
+            im=self.crop(area=zoom, pixel=pixel)
+            series, pixel_i, pixel_j = im.__plot_spectra_entire(bands=bands,
+                                                                fig_size=fig_size,
+                                                                percentile=percentile,
+                                                                title=title,
+                                                                title_im=title_im,
+                                                                title_spectra=title_spectra,
+                                                                xlabel=xlabel,
+                                                                ylabel=ylabel,
+                                                                offset_i=zoom[0][0],
+                                                                offset_j=zoom[1][0])
+            return series, pixel_i, pixel_j
+
+
+    def __plot_spectra_entire(self, bands=None, fig_size=(15, 5), percentile=2, title='',
+                     title_im="Original image (click outside to stop)",
+                     title_spectra="Spectra", xlabel="Bands", ylabel="Value", offset_i=0,offset_j=0):
+        """
+        Interactive tool to explore and plot spectral values from user-selected pixels.
+
+        This method displays the image and allows the user to click on pixels to see
+        their spectral values across all bands plotted as a line graph. Multiple pixels
+        can be selected to compare different spectral signatures.
+
+        Parameters
+        ----------
+        bands : list of str, optional
+            List of three band identifiers to use for the background image display.
+            If None, uses the first three bands in the image.
+            Default is None.
+
+        fig_size : tuple, optional
+            Size of the figure in inches as (width, height).
+            Default is (15, 5).
+
+        percentile : int, optional
+            Percentile value for contrast stretching of the background image.
+            Default is 2.
+
+        title : str, optional
+            Main title for the figure.
+            Default is ''.
+
+        title_im : str, optional
+            Title for the image panel.
+            Default is "Original image (click outside to stop)".
+
+        title_spectra : str, optional
+            Title for the spectral plot panel.
+            Default is "Spectra".
+
+        xlabel : str, optional
+            X-axis label for the spectral plot.
+            Default is "Bands".
+
+        ylabel : str, optional
+            Y-axis label for the spectral plot.
+            Default is "Value".
+
+        offset_i : int, optional
+            Offset to add to i coordinates (in case of a zoom)
+            Default is 0.
+
+        offset_j : int, optional
+            Offset to add to j coordinates (in case of a zoom)
+            Default is 0.
+
         Returns
         -------
         tuple
@@ -4883,12 +5198,12 @@ class Geoimage:
             self, bands=bands, fig_size=fig_size,
             percentile=percentile, title=title,
             title_im=title_im, title_spectra=title_spectra,
-            xlabel=xlabel, ylabel=ylabel
+            xlabel=xlabel, ylabel=ylabel, offset_i=offset_i,offset_j=offset_j
         )
 
         return series, pixel_i, pixel_j
 
-    def visu(self, bands=None, title='', percentile=0, fig_size=DEF_FIG_SIZE, cmap=None, colorbar=False, extent='latlon'):
+    def __visu_entire(self, bands=None, title='', percentile=0, fig_size=DEF_FIG_SIZE, cmap=None, colorbar=False, extent='latlon', extent_plot=None):
         """
         Visualize one or more bands of the image.
 
@@ -4932,6 +5247,8 @@ class Geoimage:
             - 'pixel': Use pixel coordinates
             - None: Don't show coordinate axes
 
+        extent_plot : a man made extent (in case of a zoom)
+
         Examples
         --------
         >>> # Visualize all bands
@@ -4953,7 +5270,11 @@ class Geoimage:
         """
         # Validate extent parameter
         if extent == 'pixel':
-            extent = self.__extent_pixels
+            if extent_plot is not None:
+                extent = extent_plot
+            else:
+                extent = self.__extent_pixels
+
         elif extent == 'latlon':
             extent = self.__extent_latlon
         elif extent is None:
@@ -5016,6 +5337,138 @@ class Geoimage:
                     if colorbar:
                         fig.colorbar(visu, ax=ax, shrink=0.8, aspect=10, pad=0.05)
                     plt.show()
+
+    def __visu_zoom(self, bands=None, title='', percentile=0, fig_size=DEF_FIG_SIZE, cmap=None, colorbar=False, extent='latlon', zoom = None, pixel = True):
+        """
+        Visualize a zoom of one or more bands of the image.
+        """
+        im=self.crop(area=zoom, pixel=pixel)
+        im.visu(bands=bands,
+                title=title,
+                fig_size=fig_size,
+                cmap=cmap,
+                colorbar=colorcar,
+                extent=extent)
+    def visu(self, bands=None, title='', percentile=0, fig_size=DEF_FIG_SIZE, cmap=None, colorbar=False, extent='latlon', zoom = None, pixel = True):
+        """
+        Visualize one or more bands of the image.
+
+        This method provides a flexible way to display individual bands or multiple bands
+        as separate figures. Unlike colorcomp, which creates RGB composites, this method
+        displays each band in grayscale or with a specified colormap.
+
+        Parameters
+        ----------
+        bands : str, list of str, or None, optional
+            The bands to visualize:
+            - If None: Displays all bands separately
+            - If a string: Displays a single specified band
+            - If a list: Displays each specified band separately
+            Default is None.
+
+        title : str, optional
+            Base title for the visualization. Band names will be appended.
+            Default is ''.
+
+        percentile : int, optional
+            Percentile value for contrast stretching (e.g., 2 for a 2-98% stretch).
+            Default is 2.
+
+        fig_size : tuple, optional
+            Size of the figure in inches as (width, height).
+            Default is DEF_FIG_SIZE.
+
+        cmap : str, optional
+            Matplotlib colormap name to use for display.
+            Examples: 'viridis', 'plasma', 'gray', 'RdYlGn'
+            Default is None (uses matplotlib default).
+
+        colorbar : bool, optional
+            Whether to display a colorbar next to each image.
+            Default is False.
+
+        extent : {'latlon', 'pixel', None}, optional
+            Type of extent to use for the plot:
+            - 'latlon': Use latitude/longitude coordinates (default)
+            - 'pixel': Use pixel coordinates
+            - None: Don't show coordinate axes
+
+        zoom : tuple, optional
+            To visualize  only a window of the image
+                If based on pixel coordinates, you must indicate
+                - the row/col coordinades of
+                        the north-west corner (deb_row,deb_col)
+                - the row/col coordinades of
+                        the south-east corner (end_row,end_col)
+                in a tuple  `zoom = ((deb_row,end_row),(deb_col,end_col))`
+
+                If based on latitude/longitude coordinates, you must indicate
+                - the lat/lon coordinades of the north-west corner (lat1,lon1)
+                - the lat/lon coordinades of the south-east corner (lat2,lon2)
+                `zoom = ((lon1,lon2),(lat1,lat2))`
+            If not provide, visualize the entire image
+
+        pixel : bool, optional
+            Coordinate system flag, if zoom is given:
+            - If True: Coordinates are interpreted as pixel indices
+            - If False: Coordinates are interpreted as geographic coordinates
+            Default is True.
+
+
+        Examples
+        --------
+        >>> # Visualize all bands
+        >>> image.visu()
+        >>>
+        >>> # Visualize a single band with a colormap and colorbar
+        >>> image.visu("NIR", cmap='plasma', colorbar=True, title="Near Infrared Band")
+        >>>
+        >>> # Visualize selected bands
+        >>> image.visu(["Red", "NIR", "NDVI"], fig_size=(10, 8))
+        >>>
+        >>> # Visualize selected bands on a zoom
+        >>> image.visu(["Red", "NIR", "NDVI"], fig_size=(10, 8), zoom = ((100,200),(450,600)))
+
+        Notes
+        -----
+        This method is useful for:
+        - Examining individual spectral bands in detail
+        - Comparing several derived indices side by side
+        - Applying different colormaps to highlight specific features
+        - Visualizing single-band thematic data (e.g., elevation, classification results)
+        """
+        if zoom is None:
+            self.__visu_entire(bands=bands,
+                               title=title,
+                               percentile=percentile,
+                               fig_size=fig_size,
+                               cmap=cmap,
+                               colorbar=colorbar,
+                               extent=extent)
+        else:
+            im=self.crop(area=zoom, pixel=pixel)
+            if extent=='pixel':
+                extent_plot = im.__extent_pixels.copy()
+                extent_plot[0] = im.__extent_pixels[0]+zoom[1][0]
+                extent_plot[1] = im.__extent_pixels[1]+zoom[1][0]
+                extent_plot[2] = im.__extent_pixels[2]+zoom[0][0]
+                extent_plot[3] = im.__extent_pixels[3]+zoom[0][0]
+
+                im.__visu_entire(bands=bands,
+                                 title=title,
+                                 fig_size=fig_size,
+                                 cmap=cmap,
+                                 colorbar=colorbar,
+                                 extent=extent, extent_plot=extent_plot)
+            else:
+                im.__visu_entire(bands=bands,
+                                 title=title,
+                                 fig_size=fig_size,
+                                 cmap=cmap,
+                                 colorbar=colorbar,
+                                 extent=extent)
+
+
 
     def numpy_channel_first(self, bands=None):
         """
@@ -6302,7 +6755,7 @@ class Geoimage:
         """
         # Resample shape image if needed
         if shp.resolution != self.resolution:
-            shp = shp.resampling(self.resolution)
+            shp = shp.resample(self.resolution)
 
         # Ensure images have matching dimensions
         shp, imc = extract_common_areas(shp, self, resolution=None)
@@ -6457,12 +6910,12 @@ class Geoimage:
         >>>      dest_name="clusters.tif")
         >>>
         >>> # Apply same model to another image
-        >>> other_classified = other_image.apply_ML_model(model)
+        >>> other_classified = other_image.predict(model)
 
         Notes
         -----
         - Standardization is recommended, especially when bands have different ranges
-        - The returned model can be used with apply_ML_model() on other images
+        - The returned model can be used with predict() on other images
         """
         # Initialize random number generator
         rng = np.random.RandomState(random_state)
@@ -6507,6 +6960,11 @@ class Geoimage:
                 im_classif.__listhistory.append(f'\t Saved to: {dest_name}')
 
         return im_classif, (kmean_model, scaler)
+
+
+
+
+
 
     def apply_ML_model(self, model, bands=None):
         """
@@ -6700,6 +7158,99 @@ class Geoimage:
             now_str = now.strftime("%Y-%m-%d %H:%M:%S")
             model_type = type(ml_model).__name__
             im_classif.__listhistory.append(f'[{now_str}] - Created using ML model: {model_type}')
+            if bands is not None:
+                im_classif.__listhistory.append(f'\t Using bands: {bands}')
+
+        return im_classif
+
+    def transform(self, model, bands=None):
+        """
+        Apply a projection model  (PCA, tSNE, ...) to the image.
+
+        This method applies a projection model (such as one created by pca())
+        to the image data, creating a new   image.
+
+        Parameters
+        ----------
+        model : scikit model or tuple
+            If tuple, it must containi (data_model, scaler) where:
+            - data_model: A trained scikit-learn model with a transform() method
+            - scaler: The scaler used for standardization (or None if not used)
+        bands : list of str or None, optional
+            List of bands to use as input for the model. If None, all bands are used.
+            Default is None.
+
+        Returns
+        -------
+        Geoimage
+            A new Geoimage containing the model output
+
+        Examples
+        --------
+        >>> # Train a model on one image and apply to another
+        >>> pca, model = reference_image.pca(n_components=5)
+        >>> new_projection = target_image.transform(model)
+        >>> new_projection.visu(colorbar=True, cmap='viridis')
+        >>>
+        >>> # Train on specific bands and apply to the same bands
+        >>> _, model = image.pca(bands=["NIR", "Red"], n_components=3)
+        >>> result = image.transform(model, bands=["NIR", "Red"])
+        >>> result.save("pca.tif")
+        >>>
+        >>> # Apply a RF model trained of other data to a Geoimage
+        >>> from sklearn.decomposition import PCA
+        >>> clf = PCA(n_components=2, random_state=0)
+        >>> clf.fit(X, y)
+        >>> result = image.transform(clf)
+
+
+        Notes
+        -----
+        - The model must have been trained on data with the same structure as what it's being applied to (e.g., same number of bands)
+        - If a scaler was used during training, it will be applied before prediction
+        """
+        if isinstance(model,tuple):
+            # Extract model and scaler from tuple
+            ml_model = model[0]
+            scaler = model[1]
+        else:
+            ml_model = model
+            scaler = None
+
+        # Convert image data to table format
+        tab_ori = self.numpy_table(bands=bands)
+
+        # Apply scaling if a scaler was provided
+        if scaler is not None:
+            tab_ori = scaler.transform(tab_ori)
+
+        # Apply the model to get predictions
+        outputs = ml_model.transform(tab_ori)
+
+        # Reshape predictions back to image format
+        outputs = table2image(outputs, self.shape)
+
+        # Create metadata for output image
+        meta = self.__meta.copy()
+
+        # Set band count based on output shape
+        if len(outputs.shape) == 2:
+            meta['count'] = 1
+        else:
+            meta['count'] = outputs.shape[0]
+
+        # Update data type
+        type_str = str(outputs.dtype)
+        meta['dtype'] = type_str
+
+        # Create and return new Geoimage with model outputs
+        im_classif = Geoimage(data=outputs, meta=meta, georef=self.__georef, history=self.__history)
+
+        if im_classif.__history is not False:
+            now = datetime.datetime.now()
+            now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+            model_type = type(ml_model).__name__
+            im_classif.__listhistory.append(f'[{now_str}] - Created using transformation model: {model_type}')
             if bands is not None:
                 im_classif.__listhistory.append(f'\t Using bands: {bands}')
 
@@ -7639,7 +8190,8 @@ class Geoimage:
             return(self.__apply_resampling(final_resolution, dest_name=dest_name, method=method))
 
 
-    def crop(self, deb_row_lon, end_row_lon, deb_col_lat, end_col_lat, dest_name=None, pixel=True, inplace=False):
+    def crop(self, *args,
+             area = None, dest_name=None, pixel=True, inplace=False):
         """
         Crop the image to a specified extent.
 
@@ -7649,6 +8201,65 @@ class Geoimage:
 
         Parameters
         ----------
+        area : tuple
+            Area to crop
+                If based on pixel coordinates, you must indicate
+                - the row/col coordinades of
+                        the north-west corner (deb_row,deb_col)
+                - the row/col coordinades of
+                        the south-east corner (end_row,end_col)
+                in a tuple  `area = ((deb_row,end_row),(deb_col,end_col))`
+
+                If based on latitude/longitude coordinates, you must indicate
+                - the lat/lon coordinades of the north-west corner (lat1,lon1)
+                - the lat/lon coordinades of the south-east corner (lat2,lon2)
+                `area = ((lon1,lon2),(lat1,lat2))`
+
+        inplace : bool, default False
+            If False, return a copy. Otherwise, do cropping in place and return None.
+
+        pixel : bool, optional
+            Coordinate system flag:
+            - If True: Coordinates are interpreted as pixel indices (row, col)
+            - If False: Coordinates are interpreted as geographic coordinates (lon, lat)
+            Default is True.
+
+        Returns
+        -------
+        Geoimage
+            A copy of the cropped image or None if `inplace=True`
+
+        Examples
+        --------
+        >>> # Crop using pixel coordinates
+        >>> original_shape = image.shape
+        >>> image_crop = image.crop(area=((100, 500), (200, 600)))
+        >>> print(f"Original shape: {original_shape}, New shape: {image_crop.shape}")
+        >>>
+        >>> # Crop using geographic coordinates
+        >>> image_crop = image.crop(area=((-122.5, -122.3), (37.8, 37.7)), pixel=False)
+        >>> image.visu()
+        >>>
+        >>> # Crop and save the result
+        >>> image_crop = image.crop(area=((100, 500), (200, 600)), dest_name='cropped_area.tif')
+        >>>
+        >>>
+        >>> # Crop using pixel coordinates
+        >>> original_shape = image.shape
+        >>> image.crop(area=((100, 500), (200, 600)), inplace=True) # inplace = True : modify directly the image
+        >>> print(f"Original shape: {original_shape}, New shape: {image.shape}")
+        >>>
+        >>> # Crop using geographic coordinates
+        >>> image.crop(area=((-122.5, -122.3), (37.8, 37.7)), pixel=False, inplace=True)
+        >>> image.visu()
+        >>>
+        >>> # Crop and save the result
+        >>> image.crop(area=((100, 500), (200, 600)), dest_name='cropped_area.tif', inplace=True)
+
+        Notes
+        -----
+        - For consistency with older versions, a use with 4 parameters (deb_row_lon, end_row_lon, deb_col_lat, end_col_lat)
+          instead of the `area` tuple is possible
         deb_row_lon : int or float
             Starting position (north):
             - If pixel=True: Starting row (y) coordinate
@@ -7673,54 +8284,38 @@ class Geoimage:
             Path to save the cropped image. If None, the image is not saved.
             Default is None.
 
-        inplace : bool, default False
-            If False, return a copy. Otherwise, do cropping in place and return None.
-
-        pixel : bool, optional
-            Coordinate system flag:
-            - If True: Coordinates are interpreted as pixel indices (row, col)
-            - If False: Coordinates are interpreted as geographic coordinates (lon, lat)
-            Default is True.
-
-        Returns
-        -------
-        Geoimage
-            A copy of the cropped image or None if `inplace=True`
-
-        Examples
-        --------
-        >>> # Crop using pixel coordinates
-        >>> original_shape = image.shape
-        >>> image_crop = image.crop(100, 500, 200, 600)
-        >>> print(f"Original shape: {original_shape}, New shape: {image_crop.shape}")
-        >>>
-        >>> # Crop using geographic coordinates
-        >>> image_crop = image.crop(-122.5, -122.3, 37.8, 37.7, pixel=False)
-        >>> image.visu()
-        >>>
-        >>> # Crop and save the result
-        >>> image_crop = image.crop(100, 500, 200, 600, dest_name='cropped_area.tif')
-        >>>
-        >>>
-        >>> # Crop using pixel coordinates
-        >>> original_shape = image.shape
-        >>> image.crop(100, 500, 200, 600, inplace=True) # inplace = True : modify directly the image
-        >>> print(f"Original shape: {original_shape}, New shape: {image.shape}")
-        >>>
-        >>> # Crop using geographic coordinates
-        >>> image.crop(-122.5, -122.3, 37.8, 37.7, pixel=False, inplace=True)
-        >>> image.visu()
-        >>>
-        >>> # Crop and save the result
-        >>> image.crop(100, 500, 200, 600, dest_name='cropped_area.tif', inplace=True)
-
-        Notes
-        -----
         - The cropping operation changes the spatial extent of the image but preserves
         the resolution and projection.
         - When using pixel coordinates, the format is (row_start, row_end, col_start, col_end).
         - When using geographic coordinates, the format is (lon_start, lon_end, lat_start, lat_end).
         """
+        if args:
+            if area is not None:
+                raise TypeError("Cannot specify both positional arguments and the 'area' keyword.")
+
+            if len(args) == 4:
+                # Avertir l'utilisateur que cette méthode est obsolète
+                warnings.warn(
+                    "Calling crop() with 4 positional arguments is deprecated. "
+                    "Use the 'area=((start_row, end_row), (start_col, end_col))' keyword instead.",
+                    DeprecationWarning,
+                    stacklevel=2
+                )
+                deb_row_lon, end_row_lon, deb_col_lat, end_col_lat = args
+                # On reconstruit le paramètre 'area' à partir des anciens arguments
+                area = ((deb_row_lon, end_row_lon), (deb_col_lat, end_col_lat))
+            else:
+                raise TypeError(f"crop() takes 4 positional arguments for legacy calls, but {len(args)} were given.")
+
+
+
+
+        if area is not None:
+            deb_row_lon = area[0][0]
+            end_row_lon = area[0][1]
+            deb_col_lat = area[1][0]
+            end_col_lat = area[1][1]
+
         if inplace:
             original_shape = self.shape
 
@@ -9748,3 +10343,341 @@ class Geoimage:
                         f'[{now_str}] - Filtered image with %s kernel.'%method
                     )
                 return new_im
+
+
+    def pca(self, n_components=4, bands=None, random_state=RANDOM_STATE, dest_name=None, standardization=True, nb_points=1000):
+        """
+        Perform PCA on the image data.
+
+        This method computes a Principal Component Analysis (PCA) on selected image bands.
+
+        Parameters
+        ----------
+        n_components : int, optional
+            Number of components to keep (if None, all components are kept).
+            Default is 4.
+        bands : list of str or None, optional
+            List of bands to use. If None, all bands are used.
+            Default is None.
+        random_state : int or None, optional
+            Random seed for reproducible results. If None, results may vary between runs.
+            Default is RANDOM_STATE (defined globally).
+        dest_name : str, optional
+            Path to save the decomposition. If None, the image is not saved.
+            Default is None.
+        standardization : bool, optional
+            Whether to standardize bands before PCA (recommended).
+            Default is True.
+        nb_points : int or None, optional
+            Number of random points to sample for PCA computation. If None,
+            all valid pixels are used (may be slow for large images).
+            Default is 1000.
+
+        Returns
+        -------
+        Geoimage
+            A new Geoimage containing the PCA bands.
+        tuple
+            A tuple (pca_model, scaler) to reuse the transformation on other images.
+
+        Examples
+        --------
+        >>> # Basic PCA with 5 components
+        >>> pca, (pca_model, scaler) = image.pca(n_components=5)
+        >>> pca.visu(colorbar=True, cmap='viridis')
+
+        >>> # PCA only on specific bands and save result
+        >>> pca, (pca_model, scaler) = image.pca(
+        ...     n_components=3, bands=["NIR", "Red", "Green"],
+        ...     dest_name="pca.tif")
+
+        >>> # Apply the same model to another image
+        >>> other_pca = other_image.transform((pca_model, scaler))
+
+        Notes
+        -----
+        - Standardization is recommended, especially when bands have different ranges.
+        - The returned (pca_model, scaler) can be reused to project other images into the same PCA space.
+        """
+        from sklearn.decomposition import PCA
+        # Initialize random number generator
+        rng = np.random.RandomState(random_state)
+
+        # Extract image data as table
+        tab = self.numpy_table(bands=bands)
+
+        # Remove nodata pixels
+        mask = ~np.any(tab == self.nodata, axis=1)
+        tab = tab[mask]
+
+        # Sample points if requested (for speed)
+        if nb_points is not None and tab.shape[0] > nb_points:
+            idx = rng.randint(tab.shape[0], size=(nb_points,))
+            tab = tab[idx, :]
+
+        # Standardize data if requested
+        if standardization is True:
+            scaler = StandardScaler().fit(tab)
+            tab = scaler.transform(tab)
+        else:
+            scaler = None
+
+        # Apply PCA
+        pca_model = PCA(n_components=n_components, random_state=random_state)
+        pca_model.fit(tab)
+
+        # Apply the model to create PCA image
+        pca = self.transform((pca_model, scaler), bands=bands)
+
+        # Change the names
+        new_names={f'PCA_{i}': i for i in range(1, n_components+1)}
+        pca.change_names(new_names)
+
+        # Save if requested
+        if dest_name is not None:
+            pca.save(dest_name)
+
+        if pca.__history is not False:
+            now = datetime.datetime.now()
+            now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+            pca.__listhistory.append(f'[{now_str}] - Created using PCA 'f'with {n_components} components')
+            if bands is not None:
+                pca.__listhistory.append(f'\t Using bands: {bands}')
+            if dest_name is not None:
+                pca.__listhistory.append(f'\t Saved to: {dest_name}')
+
+        return pca, (pca_model, scaler)
+
+
+
+
+    def tsne(self, n_components=4, perplexity = 5, bands=None, random_state=RANDOM_STATE, dest_name=None, standardization=True):
+        """
+        Perform TSNE on the image data.
+
+        This method computes a t-distributed Stochastic Neighbor Embeddings (tSNE) on selected image bands.
+
+        Parameters
+        ----------
+        n_components : int, optional
+            Number of components to keep (if None, all components are kept).
+            Default is 4.
+        perplexity : int, optional
+            Perplexity in TSNE. It is related to the number of nearest neighbors
+               that is used in other manifold learning algorithms.
+            Default is 4.
+        bands : list of str or None, optional
+            List of bands to use. If None, all bands are used.
+            Default is None.
+        random_state : int or None, optional
+            Random seed for reproducible results. If None, results may vary between runs.
+            Default is RANDOM_STATE (defined globally).
+        dest_name : str, optional
+            Path to save the decomposition. If None, the image is not saved.
+            Default is None.
+        standardization : bool, optional
+            Whether to standardize bands before PCA (recommended).
+            Default is True.
+
+        Returns
+        -------
+        Geoimage
+            A new Geoimage containing the TSNE bands.
+        tuple
+            A tuple (tsne_model, scaler) to reuse the transformation on other images.
+
+        Examples
+        --------
+        >>> # Basic TSNE with 5 components
+        >>> tsne = image.tsne(n_components=5, perplexity = 5)
+        >>> tsne.visu(colorbar=True, cmap='viridis')
+
+        >>> # TSNE only on specific bands and save result
+        >>> tsne = image.tsne(
+        ...     n_components=3, , perplexity = 3, bands=["NIR", "Red", "Green"],
+        ...     dest_name="tsne.tif")
+
+
+        Notes
+        -----
+        - Standardization is recommended, especially when bands have different ranges.
+        - The returned (tsne_model, scaler) can be reused to project other images into the same PCA space.
+        - Unlike PCA, here we apply TSNE to the entire image. The model can not be applied to other ones
+        """
+        from sklearn.manifold import TSNE
+        # Initialize random number generator
+        rng = np.random.RandomState(random_state)
+
+        # Extract image data as table
+        tab = self.numpy_table(bands=bands)
+
+        # Standardize data if requested
+        if standardization is True:
+            scaler = StandardScaler().fit(tab)
+            tab = scaler.transform(tab)
+        else:
+            scaler = None
+
+        # Apply TSNE
+        tsne_model = TSNE(n_components=n_components, random_state=random_state, perplexity=perplexity)
+        tsne = tsne_model.fit_transform(tab)
+
+        outputs = table2image(tsne, self.shape)
+
+        # Create metadata for output image
+        meta = self.__meta.copy()
+
+        # Set band count based on output shape
+        if len(outputs.shape) == 2:
+            meta['count'] = 1
+        else:
+            meta['count'] = outputs.shape[0]
+
+        # Update data type
+        type_str = str(outputs.dtype)
+        meta['dtype'] = type_str
+
+        # Create and return new Geoimage with model outputs
+        tsne = Geoimage(data=outputs, meta=meta, georef=self.__georef, history=self.__history)
+
+        # Change the names
+        new_names={f'TSNE_{i}': i for i in range(1, n_components+1)}
+        tsne.change_names(new_names)
+
+        # Save if requested
+        if dest_name is not None:
+            tsne.save(dest_name)
+
+        if tsne.__history is not False:
+            now = datetime.datetime.now()
+            now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+            tsne.__listhistory.append(f'[{now_str}] - Created using TSNE 'f'with {n_components} components')
+            if bands is not None:
+                tsne.__listhistory.append(f'\t Using bands: {bands}')
+            if dest_name is not None:
+                tsne.__listhistory.append(f'\t Saved to: {dest_name}')
+
+        return tsne
+
+
+    def lle(self, n_components=2, n_neighbors=8, bands=None, nb_points=5000, standardization=True, dest_name=None, random_state=RANDOM_STATE, **kwargs):
+        """
+        Perform Locally Linear Embedding (LLE) on the image data.
+
+        This method computes a Locally Linear Embedding reduction to unfold the
+        manifold on which the pixel values lie. It's particularly useful for
+        data with an intrinsic low-dimensional structure that is non-linear.
+
+        Parameters
+        ----------
+        n_components : int, optional
+            The number of coordinates for the manifold (target dimension).
+            Default is 2.
+        n_neighbors : int, optional
+            Number of neighbors to consider for each point. This is a crucial
+            parameter for LLE that significantly impacts the result.
+            Default is 8.
+        bands : list of str or None, optional
+            List of bands to use for the computation. If None, all bands are used.
+            Default is None.
+        nb_points : int or None, optional
+            Number of random pixels to sample for the LLE computation. Since LLE
+            is computationally intensive, using a sample is highly recommended for
+            large images. If None, all valid pixels are used.
+            Default is 5000.
+        standardization : bool, optional
+            Whether to standardize bands before applying LLE (highly recommended).
+            Default is True.
+        dest_name : str or None, optional
+            Path to save the resulting LLE image. If None, the image is not saved.
+            Default is None.
+        random_state : int or None, optional
+            Random seed for pixel sampling and for the ARPACK solver, ensuring
+            reproducible results.
+            Default is RANDOM_STATE.
+        **kwargs : dict, optional
+            Additional keyword arguments to pass to the scikit-learn
+            `LocallyLinearEmbedding` function, such as `method` ('standard',
+            'modified', 'hessian', 'ltsa'), `reg`, or `eigen_solver`.
+
+        Returns
+        -------
+        Geoimage
+            A new Geoimage instance containing the LLE components as bands.
+        tuple
+            A tuple (lle_model, scaler) containing the fitted LLE model and the
+            scaler, which can be used to transform other images.
+
+        Examples
+        --------
+        >>> # Basic LLE with 2 components
+        >>> lle_img, (lle_model, scaler) = image.lle(n_components=2)
+        >>> lle_img.visu(cmap='viridis')
+
+        >>> # LLE with more neighbors on specific bands and save the result
+        >>> lle_img, _ = image.lle(
+        ...     n_components=3,
+        ...     n_neighbors=20,
+        ...     bands=["NIR", "Red", "Green"],
+        ...     dest_name="lle_result.tif"
+        ... )
+
+        >>> # Apply the same LLE model to another image
+        >>> other_image_lle = other_image.transform((lle_model, scaler))
+
+        Notes
+        -----
+        - LLE is computationally more expensive than PCA. Using a subset of pixels
+          via `nb_points` is strongly advised for large rasters.
+        - The choice of `n_neighbors` is critical. A value too small may fail to
+          capture the underlying manifold, while a value too large may over-smooth it.
+        - The returned (lle_model, scaler) tuple can be used to project other images
+          into the same embedding space, assuming they lie on the same manifold.
+        """
+        from sklearn.manifold import LocallyLinearEmbedding
+        # Initialize random number generator
+        rng = np.random.RandomState(random_state)
+
+        # Extract image data as table
+        tab = self.numpy_table(bands=bands)
+
+        # Remove nodata pixels
+        mask = ~np.any(tab == self.nodata, axis=1)
+        tab = tab[mask]
+
+        # Sample points if requested (for speed)
+        if nb_points is not None and tab.shape[0] > nb_points:
+            idx = rng.randint(tab.shape[0], size=(nb_points,))
+            tab = tab[idx, :]
+
+        # Standardize data if requested
+        if standardization is True:
+            scaler = StandardScaler().fit(tab)
+            tab = scaler.transform(tab)
+        else:
+            scaler = None
+
+        # Apply LLE
+        lle_model = LocallyLinearEmbedding(n_components=n_components, n_neighbors=n_neighbors, random_state=random_state, **kwargs)
+        lle_model.fit(tab)
+        # Apply the model to create PCA image
+        lle = self.transform((lle_model, scaler), bands=bands)
+
+        # Change the names
+        new_names={f'LLE_{i}': i for i in range(1, n_components+1)}
+        lle.change_names(new_names)
+
+        # Save if requested
+        if dest_name is not None:
+            lle.save(dest_name)
+
+        if lle.__history is not False:
+            now = datetime.datetime.now()
+            now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+            lle.__listhistory.append(f'[{now_str}] - Created using LLE 'f'with {n_components} components')
+            if bands is not None:
+                lle.__listhistory.append(f'\t Using bands: {bands}')
+            if dest_name is not None:
+                lle.__listhistory.append(f'\t Saved to: {dest_name}')
+
+        return lle, (lle_model, scaler)

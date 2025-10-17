@@ -24,15 +24,11 @@ from matplotlib.widgets import Button
 import ipywidgets as widgets
 import warnings
 if os.environ.get('DISPLAY', '') == '':
-    # Utilise 'agg' si aucune interface graphique n'est détectée
     matplotlib.use('agg')
 
 from scipy import ndimage, signal
 import json
 
-#else:
-    # Utilise 'tkagg' pour un affichage interactif standard
-#    matplotlib.use('tkagg')
 
 
 
@@ -1216,7 +1212,6 @@ def reset_matplotlib(mode='inline'):
             print(f"Warning: Impossible to run run_line_magic : {e}")
 
 
-
 def is_notebook():
     try:
         from IPython import get_ipython
@@ -1224,17 +1219,187 @@ def is_notebook():
     except:
         return False
 
+import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Button
+import sys
 
-def plot_clic_spectra(im, imc, figsize=(15, 5), plot_legend=False, names=None,
+# You will need to install a library for the Qt backend.
+# In your terminal: pip install pyqt5
+
+def is_notebook():
+    """Checks if the code is running in a Jupyter-like environment."""
+    try:
+        shell = get_ipython().__class__.__name__
+        if shell == 'ZMQInteractiveShell':
+            return True   # Jupyter notebook or qtconsole
+        elif shell == 'TerminalInteractiveShell':
+            return False  # Terminal IPython
+        else:
+            return False  # Other type (?)
+    except NameError:
+        return False      # Probably a standard Python interpreter
+
+class SpectraCollector:
+    """
+    A class to manage an interactive Matplotlib window for collecting
+    spectra by clicking on an image.
+    """
+    def __init__(self, im, imc, figsize=(15, 5), names=None, title_im="Click on the image", 
+                 title_spectra="Spectra", xlabel="Bands", ylabel="Value", plot_legend=False,
+                 offset_i=0, offset_j=0):
+        
+        # --- Backend Configuration ---
+        # Force an interactive backend if not in a notebook.
+        # Jupyter's 'widget' backend must be enabled beforehand with %matplotlib widget.
+        if is_notebook():
+            ipython = get_ipython()
+            ipython.run_line_magic('matplotlib', 'inline')
+            ipython.run_line_magic('matplotlib', 'widget')
+        else:
+            plt.ion()  # Interactive mode for the standard shell
+
+        plt.close('all')
+
+        if not is_notebook():
+            try:
+                matplotlib.use('Qt5Agg')
+            except ImportError:
+                print("Warning: PyQt5 is not installed. Interactivity might not work.")
+                print("Please install it with: pip install pyqt5")
+
+        # --- Initialize variables ---
+        self.im = im
+        self.imc = imc
+        self.names = names
+        self.plot_legend = plot_legend
+        self.offset_i = offset_i
+        self.offset_j = offset_j
+        self.end_collect = False
+        self.series_spectrales = []
+        self.val_i = []
+        self.val_j = []
+        
+        # --- Create the figure ---
+        plt.close('all')
+        self.fig, (self.ax1, self.ax2) = plt.subplots(1, 2, figsize=figsize)
+        
+        self.ax1.imshow(self.imc, extent=[offset_j, self.imc.shape[1] + offset_j, self.imc.shape[0] + offset_i, offset_i])
+        self.ax1.set_title(title_im)
+        self.ax2.set_title(title_spectra)
+        self.ax2.set_xlabel(xlabel)
+        self.ax2.set_ylabel(ylabel)
+
+        # --- Add widgets ---
+        self.close_button = Button(plt.axes([0.04, 0.92, 0.1, 0.05]), 'Finish')
+        self.close_button.on_clicked(self.close_figure)
+
+        # --- Connect the click event ---
+        self.cid = self.fig.canvas.mpl_connect('button_press_event', self.onclick)
+
+        # --- Message for the user (replaces ipywidgets) ---
+        print("➡️ Interactive window is open. Please click on the image to collect data.")
+        
+        # Show the figure and block execution until it is closed.
+        plt.show()
+
+    def onclick(self, event):
+        # If the click is outside the image axes, close the figure.
+        if event.inaxes != self.ax1:
+            self.close_figure()
+            return
+        else:
+            print('inside')
+
+        i, j = int(event.ydata - self.offset_i), int(event.xdata - self.offset_j)
+        self.val_i.append(i + self.offset_i)
+        self.val_j.append(j + self.offset_j)
+
+        serie_spectrale = self.im[i, j, :]
+        self.series_spectrales.append(serie_spectrale)
+
+        self.update_spectra_plot()
+
+    def update_spectra_plot(self):
+        self.ax2.clear() # Clear axes to redraw
+        for idx, spectre in enumerate(self.series_spectrales):
+            label = f'Series {idx} ({self.val_i[idx]},{self.val_j[idx]})'
+            if self.plot_legend:
+                self.ax2.plot(spectre, label=label)
+                self.ax2.legend()
+            else:
+                self.ax2.plot(spectre)
+        
+        if self.names is not None:
+            self.ax2.set_xticks(range(len(self.names)))
+            self.ax2.set_xticklabels(self.names, rotation=45)
+            
+        self.fig.canvas.draw_idle()
+
+    def close_figure(self, event=None):
+        # Check if the window still exists before trying to close it
+        if self.fig.canvas.manager and self.fig.canvas.manager.window:
+            self.fig.canvas.mpl_disconnect(self.cid)
+            plt.close(self.fig)
+            print("✅ Collection finished. Data is now available.")
+            self.end_collect = True
+
+    
+    
+    def get_data(self):
+        """Returns the collected data."""
+        return self.series_spectrales, self.val_i, self.val_j, self.end_collect
+        
+def plot_clic_spectra2(im, imc, figsize=(15, 5),
+                      plot_legend=False,
+                      names=None,
                       title_im="Original image (click outside or finish button to stop)",
-                      title_spectra="Spectra", xlabel="Bands", ylabel="Value",callback=None):
+                      title_spectra="Spectra",
+                      xlabel="Bands",
+                      ylabel="Value",
+                      callback=None,
+                      offset_i=0,
+                      offset_j = 0):
+    # 'im' and 'imc' are your numpy image arrays
+    collector = SpectraCollector(im, imc,
+                                names=names,
+                                title_im=title_im,
+                                title_spectra=title_spectra,
+                                xlabel=xlabel,
+                                ylabel=ylabel,
+                                plot_legend=plot_legend,
+                                offset_i=offset_i,
+                                offset_j=offset_j)
+
+    spectra, i_coords, j_coords, end_collect = collector.get_data()
+
+    print(f"Collected {len(spectra)} spectra.")
+    return spectra, i_coords, j_coords, end_collect
+
+def plot_clic_spectra(im, imc, figsize=(15, 5),
+                      plot_legend=False,
+                      names=None,
+                      title_im="Original image (click outside or finish button to stop)",
+                      title_spectra="Spectra",
+                      xlabel="Bands",
+                      ylabel="Value",
+                      callback=None,
+                      offset_i=0,
+                      offset_j = 0,
+                      colab=False):
     if is_notebook():
+        print('nootebook')
         ipython = get_ipython()
         ipython.run_line_magic('matplotlib', 'inline')
         ipython.run_line_magic('matplotlib', 'widget')
     else:
         plt.ion()  # Interactive mode for the standard shell
-
+        if colab is False:
+            matplotlib.use('Qt5Agg')
+        else:
+            ipython = get_ipython()
+            ipython.run_line_magic('matplotlib', 'widget')
+            
     plt.close('all')
 
     series_spectrales = []
@@ -1243,7 +1408,10 @@ def plot_clic_spectra(im, imc, figsize=(15, 5), plot_legend=False, names=None,
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
     fig.suptitle("")
-    ax1.imshow(imc)
+    if colab is False:
+        ax1.imshow(imc, extent=[offset_j,imc.shape[1]+offset_j,imc.shape[0]+offset_i,offset_i])
+    else:
+        ax1.imshow(imc)
     ax1.set_title(title_im)
 
     close_button = Button(plt.axes([0.04, 0.92, 0.1, 0.05]), 'Finish')  # Adjusted position for top-left
@@ -1267,9 +1435,9 @@ def plot_clic_spectra(im, imc, figsize=(15, 5), plot_legend=False, names=None,
             close_figure()
             return
 
-        i, j = int(event.ydata), int(event.xdata)
-        val_i.append(i)
-        val_j.append(j)
+        i, j = int(event.ydata-offset_i), int(event.xdata-offset_j)
+        val_i.append(i+offset_i)
+        val_j.append(j+offset_j)
 
         # Extract the spectral values at the clicked point
         serie_spectrale = im[i, j, :]  # Extract spectral data

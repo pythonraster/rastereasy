@@ -155,6 +155,33 @@ Journal of Open Source Software, submitted, 2025.
 This project is licensed under the MIT License – see the [LICENCE](https://github.com/pythonraster/rastereasy/blob/main/LICENCE) file for details.
 
 ## Releases
+0.3.0
+-----
+
+This new version introduces several new features and improvements focused on dimensionality reduction, visualization, and overall consistency across the library.
+
+** New features
+
+- Dimensionality reduction: Added support for PCA, t-SNE, and LLE methods for feature extraction and visualization.
+
+- Visualization: Added a `zoom` parameter to all visualization functions (.visu(), .colorcomp(), .plot_spectra()), allowing users to focus on specific regions of interest.
+
+** Improvements
+
+- Crop function harmonization: The `crop()` function has been standardized.
+It now accepts either:
+
+  - a pixel-based area definition: `area=((deb_row, end_row), (deb_col, end_col))`, or
+
+  - geographic coordinates of the north-west (lat1, lon1) and south-east (lat2, lon2) corners.
+
+- Consistent documentation: Updated comments and docstrings to ensure consistency with the `predict()` function and other ML-related methods.
+
+** Bug fixes
+
+- Fixed a bug occurring when opening windowed versions of images that caused incorrect band naming.
+
+
 0.2.2
 -----
 - Minor bug in plotting
