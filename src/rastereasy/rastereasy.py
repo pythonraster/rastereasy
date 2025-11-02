@@ -321,6 +321,12 @@ def im2tiles(source_name, dest_name, nb_row, nb_col, overlap=0, type_name='seque
     if not os.path.exists(dest_name):
         os.makedirs(dest_name)
         print('creation of folder ', dest_name)
+    else:
+        comm=('\\rm -rf %s'%dest_name)
+        os.system(comm)
+        os.makedirs(dest_name)
+        print('remove folder ', dest_name)
+
 
     # Process the image
     split_image_to_tiles(
@@ -2294,6 +2300,7 @@ class Geoimage:
             else:
                 if check_dict(extra_tags) and len(extra_tags)==self.__meta['count']:
                     self.names = extra_tags
+                    self.__namesgiven = True
                 else:
                     self.names = {}
                     for i in range(self.__meta['count']):
@@ -2467,6 +2474,7 @@ class Geoimage:
                     self.__update_names()
                 else:
                     self.names = reorder_dict_by_values(extra_tags)
+                    self.__namesgiven = True
         else:
             if len(names) != self.__meta['count']:
                 raise ValueError(f"Error: the number of given names ({len(names)}) does not match "

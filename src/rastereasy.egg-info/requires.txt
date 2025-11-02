@@ -4,4 +4,5 @@ POT>=0.9.5
 scikit-learn
 matplotlib
 ipywidgets
+PyQt5
 ipympl

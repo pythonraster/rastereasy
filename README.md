@@ -155,6 +155,17 @@ Journal of Open Source Software, submitted, 2025.
 This project is licensed under the MIT License – see the [LICENCE](https://github.com/pythonraster/rastereasy/blob/main/LICENCE) file for details.
 
 ## Releases
+
+0.3.1
+-----
+
+
+**Bug fixes & improvement**:
+
+  - Naming: Fixed an issue where band names could be reset when manipulating images that already had saved names.
+
+  - im2tiles: Now clears any existing snippets in a folder before saving new ones, preventing leftover files from previous runs.
+
 0.3.0
 -----
 
