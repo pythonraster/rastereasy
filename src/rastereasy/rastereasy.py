@@ -274,7 +274,7 @@ def im2tiles_sequence(source_name, dest_name, nb_row, nb_col, overlap=0, type_na
         )
 
 
-def im2tiles(source_name, dest_name, nb_row, nb_col, overlap=0, type_name='sequence', verbose=0, name_tile=None):
+def im2tiles(source_name, dest_name, nb_row, nb_col, overlap=0, type_name='sequence', verbose=0, name_tile=None, reset=True):
     """
     Split a geotif image into tiles.
 
@@ -298,6 +298,8 @@ def im2tiles(source_name, dest_name, nb_row, nb_col, overlap=0, type_name='seque
     name_tile : str, optional
         Generic name for output tiles. If None, uses source_name without extension.
         Default is None.
+    reset : bool, optional
+        If True (default), delete all images inside the folder before creating tiles
 
     Raises
     ------
@@ -313,6 +315,15 @@ def im2tiles(source_name, dest_name, nb_row, nb_col, overlap=0, type_name='seque
     >>>      nb_col=256,
     >>>      overlap=10,
     >>>      type_name="sequence")
+    >>>
+    >>> im2tiles(
+    >>>      source_name="input.tif",
+    >>>      dest_name="/path/to/destination",
+    >>>      nb_row=256,
+    >>>      nb_col=256,
+    >>>      overlap=10,
+    >>>      type_name="sequence",
+    >>>      reset=False)
     """
     if not (type_name == "sequence" or type_name == "coord"):
         raise ValueError("type_name must be either sequence or coord")
@@ -322,11 +333,12 @@ def im2tiles(source_name, dest_name, nb_row, nb_col, overlap=0, type_name='seque
         os.makedirs(dest_name)
         print('creation of folder ', dest_name)
     else:
-        comm=('\\rm -rf %s'%dest_name)
-        os.system(comm)
-        os.makedirs(dest_name)
-        print('remove folder ', dest_name)
-
+        if reset:
+            comm=('\\rm -rf %s'%dest_name)
+            os.system(comm)
+            os.makedirs(dest_name)
+            print('remove folder ', dest_name)
+        
 
     # Process the image
     split_image_to_tiles(
@@ -6017,7 +6029,7 @@ class Geoimage:
 
         return geoim
 
-    def astype(self, dtype):
+    def astype(self, dtype, inplace=False):
         """
         Convert the image data to a specified data type.
 
@@ -6029,6 +6041,9 @@ class Geoimage:
         dtype : str or numpy.dtype
             The target data type (e.g., 'uint8', 'float32', 'int16')
 
+        inplace : bool, default False
+            If False, return a copy. Otherwise, do modification in place and return None.
+
         Returns
         -------
         self : Geoimage
@@ -6037,12 +6052,12 @@ class Geoimage:
         Examples
         --------
         >>> # Convert to 8-bit unsigned integer
-        >>> image.astype('uint8')
+        >>> image.astype('uint8', inplace = True)
         >>> image.info()  # Should show dtype: uint8
         >>>
         >>> # Convert to 32-bit floating point
-        >>> image.astype('float32')
-        >>> image.visu()
+        >>> im2 = image.astype('float32')
+        >>> im2.info()
 
         Notes
         -----
@@ -6054,18 +6069,30 @@ class Geoimage:
         - float64: 64-bit floating point, highest precision but more memory usage
 
         Warning: Converting to a smaller data type may result in loss of information
-        or precision. For example, converting float32 to uint8.
+        or precision (for example, converting float32 to uint8).
         """
-        npdtype = np.dtype(dtype)
-        self.image = self.image.astype(npdtype)
-        self.__meta['dtype'] = dtype
 
-        if self.__history is not False:
-            now = datetime.datetime.now()
-            now_str = now.strftime("%Y-%m-%d %H:%M:%S")
-            self.__listhistory.append(f'[{now_str}] - Changed data type to {dtype}')
+        if inplace:
+            npdtype = np.dtype(dtype)
+            self.image = self.image.astype(npdtype)
+            self.__meta['dtype'] = dtype
+    
+            if self.__history is not False:
+                now = datetime.datetime.now()
+                now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+                self.__listhistory.append(f'[{now_str}] - Changed data type to {dtype}')
+            return self
+        else:
+            im = self.copy()
+            npdtype = np.dtype(dtype)
+            im.upload_image(im.numpy_channel_first().astype(npdtype), inplace=True)
+    
+            if im.__history is not False:
+                now = datetime.datetime.now()
+                now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+                im.__listhistory.append(f'[{now_str}] - Changed data type to {dtype}')
+            return im
 
-        return self
 
     def __apply_resampling(self, final_resolution, dest_name=None, method='cubic_spline'):
         """
