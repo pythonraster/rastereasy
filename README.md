@@ -156,23 +156,6 @@ This project is licensed under the MIT License – see the [LICENCE](https://git
 
 ## Releases
 
-0.3.2
------
-
-
-**Improvements**:
-
-- `im2tiles`: Output Folder Management (Breaking Change)
-
-The default behavior of the `im2tiles` function has been changed. If the output folder already exists, the function will now delete by default any existing snippets within it before generating new ones.
-
-To keep the existing snippets during execution, use the new argument: `reset=False`.
-
-- `astype`: New In-Place Modification Option (`inplace`)
-
-A new inplace parameter has been added to the astype function.
-
-If `inplace=True`, the data type modification will be performed directly on the current object. By default, `inplace=False`, which returns a new instance with the modified data type.
 
 0.3.3
 -----
