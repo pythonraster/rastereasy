@@ -1,0 +1,27 @@
+{
+  "title": "rastereasy: A Python library for easy manipulation of geospatial raster data",
+  "upload_type": "software",
+  "creators": [
+    {
+      "name": "Corpetti, Thomas",
+      "affiliation": "CNRS, UMR 6554 LETG Rennes",
+      "orcid": "0000-0002-0257-138X"
+    },
+    {
+      "name": "MAtelot, Pierrick",
+      "affiliation": "Université de Rennes, Inserm, Irset, UMR_S 1085"
+    },
+    {
+      "name": "de la Brosse, Augustin",
+      "affiliation": "CNRS, UMR 6554 LETG Rennes",
+    },
+    {
+      "name": "Nom4, Prénom4",
+      "affiliation": "Université de Rennes, Inserm, Irset, UMR_S 1085",
+      "orcid": "0000-0003-3393-7767"
+    }
+  ],
+  "license": "MIT",
+  "keywords": ["remote sensing", "geospatial", "raster", "python"],
+  "notes": "Archive corresponding to version v0.3.2 of rastereasy for the JOSS publication."
+}
