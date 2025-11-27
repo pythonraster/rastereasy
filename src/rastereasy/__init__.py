@@ -25,7 +25,7 @@ from .rastereasy import *
 from .utils import *
 
 # Define package metadata
-__version__ = "0.3.3"
+__version__ = "0.3.4"
 __author__ = "Thomas Corpetti"
 __license__ = "MIT"
 
