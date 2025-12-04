@@ -6,8 +6,8 @@ environment_rastereasy.yml
 pyproject.toml
 .github/workflows/draft_pdf.yml
 .github/workflows/tests.yml
-dist/rastereasy-0.3.3-py3-none-any.whl
-dist/rastereasy-0.3.3.tar.gz
+dist/rastereasy-0.3.4-py3-none-any.whl
+dist/rastereasy-0.3.4.tar.gz
 illus/logo.png
 illus/spectra.png
 paper/harmonization.jpg
