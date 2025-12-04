@@ -1,0 +1,22 @@
+# 1. Exclusions cruciales (pour éviter les 50 Mo)
+prune dist
+prune build
+prune paper
+prune tests
+prune illus
+prune .github
+
+# 2. Inclusion du code source (Notez le "src/" ajouté ici)
+graft src/rastereasy
+
+# 3. Fichiers à la racine
+include LICENCE
+include README.md
+include requirements.txt
+include pyproject.toml
+
+# 4. Nettoyage global
+global-exclude *.py[cod]
+global-exclude __pycache__
+global-exclude *.so
+global-exclude .DS_Store

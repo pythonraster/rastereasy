@@ -157,9 +157,9 @@ This project is licensed under the MIT License – see the [LICENCE](https://git
 ## Releases
 
 
-0.3.3 & 0.3.4
--------------
-Fix minor bug in Metadata
+0.3.3 to 0.3.5
+--------------
+Fix minor bug in Metadata 
 
 0.3.2
 -----
