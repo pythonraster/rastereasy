@@ -30,8 +30,10 @@ Here's a quick example of what you can do with rastereasy:
 ```python
  import rastereasy
 
- # Load a georeferenced image
- image = rastereasy.Geoimage("example.tif")
+ # Load a Geoimage
+ image = rastereasy.open("example.tif")
+ # Equivalent to
+ # image = rastereasy.Geoimage("example.tif")
 
  # Get image information
  image.info()
@@ -143,23 +145,61 @@ Authors
 - [Candide Lissak](https://clissak.github.io/)
 
 Citation
-=======
+========
 If you use rastereasy, please cite:
 
-Thomas Corpetti, Pierrick Matelot, Augustin de la Brosse, Candide Lissak
-Rastereasy: A Python package for an easy manipulation of remote sensing images
-Journal of Open Source Software, submitted, 2025.
+```
+Corpetti, T., Matelot, P., de la Brosse, A., & Lissak, C. (2025). Rastereasy: A Python package for easy manipulation of remote sensing images. Journal of Open Source Software, 10(116), 8666. https://doi.org/10.21105/joss.08666
+```
 
+In bibtex :
+
+```
+@article{Corpetti_Rastereasy_A_Python_2025,
+author = {Corpetti, Thomas and Matelot, Pierrick and de la Brosse, Augustin and Lissak, Candide},
+doi = {10.21105/joss.08666},
+journal = {Journal of Open Source Software},
+month = dec,
+number = {116},
+pages = {8666},
+title = {{Rastereasy: A Python package for easy manipulation of remote sensing images}},
+url = {https://joss.theoj.org/papers/10.21105/joss.08666},
+volume = {10},
+year = {2025}
+}
+```
 
 ## License
 This project is licensed under the MIT License – see the [LICENCE](https://github.com/pythonraster/rastereasy/blob/main/LICENCE) file for details.
 
 ## Releases
+0.3.6
+-----
+
+**New features**
+
+- **New `open()` function**: Added a top-level `open()` function as an alias to the `Geoimage` constructor. This aligns with standard Python conventions (like *rasterio* or *PIL*). You can now load an image using:
+
+```
+# Standard way
+import rastereasy
+im = rastereasy.open("my_image.tif")
+
+# Also works (legacy way)
+im = rastereasy.Geoimage("my_image.tif")
+```
+
+- **Added `clip()` function**: A  method  to clip pixel values within a specified range.
+
+**Bug fixes**
+
+- **Filtering**: Fixed a minor bug that occurred during generic filtering when using large filter kernels.
+
 
 
 0.3.3 to 0.3.5
 --------------
-Fix minor bug in Metadata 
+Fix minor bug in Metadata
 
 0.3.2
 -----

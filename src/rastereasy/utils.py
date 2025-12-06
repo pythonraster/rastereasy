@@ -1388,7 +1388,6 @@ def plot_clic_spectra(im, imc, figsize=(15, 5),
                       offset_j = 0,
                       colab=False):
     if is_notebook():
-        print('nootebook')
         ipython = get_ipython()
         ipython.run_line_magic('matplotlib', 'inline')
         ipython.run_line_magic('matplotlib', 'widget')
@@ -1630,14 +1629,13 @@ def apply_filter(image, kernel, method="auto"):
     numpy.ndarray
         Filtered image, same shape as input.
     """
-
     def _filter_band(band, kernel, method):
         if method == "direct":
-#            return ndimage.convolve(band, kernel, mode="reflect")
-            return ndimage.convolve(band, kernel)
+            return ndimage.convolve(band, kernel, mode="reflect")
+#            return ndimage.convolve(band, kernel)
         elif method == "fft":
-#            return signal.fftconvolve(band, kernel, mode="same")
-            return signal.fftconvolve(band, kernel)
+            return signal.fftconvolve(band, kernel, mode="same")
+#            return signal.fftconvolve(band, kernel)
         else:  # auto
             if kernel.shape[0] * kernel.shape[1] <= 225:  # e.g. 15x15
 #                return ndimage.convolve(band, kernel, mode="reflect")

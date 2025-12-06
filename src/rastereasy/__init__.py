@@ -12,7 +12,7 @@ Modules:
 Example:
 --------
 >>> import rastereasy
->>> image = rastereasy.Geoimage("example.tif")
+>>> image = rastereasy.open("example.tif")
 >>> image.info()
 >>> image.colorcomp(['4', '3', '2'])
 >>> image.resample(2, inplace= True)
@@ -25,7 +25,7 @@ from .rastereasy import *
 from .utils import *
 
 # Define package metadata
-__version__ = "0.3.5"
+__version__ = "0.3.6"
 __author__ = "Thomas Corpetti"
 __license__ = "MIT"
 

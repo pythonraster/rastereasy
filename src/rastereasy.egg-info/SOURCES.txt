@@ -1,4 +1,5 @@
 .zenodo.json
+CITATION.cff
 CONTRIBUTING.md
 LICENCE
 MANIFEST.in

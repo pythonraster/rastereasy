@@ -76,6 +76,118 @@ RANDOM_STATE = None    # Random state for reproducible results
 
 
 
+def open(filename, *args, **kwargs):
+    """
+    Open a Geoimage object from a file or data array with metadata.
+
+    Parameters
+    ----------
+    source_name : str, optional
+        Path to a geoimage (.tif, .jp2) image file to load.
+        If provided, the image data and metadata
+        will be read from this file.
+    meta_only : bool, optional
+        If True, do not read the image but just
+        the meta information (useful for image.info()).
+    names : dict, optional
+        Dictionary mapping band names to
+        band indices (e.g., {'NIR': 1, 'R': 2, 'G': 3}).
+        If not provided, bands will be
+        named numerically ('1', '2', '3', ...).
+    area : tuple, optional
+        To read  only a window of the image
+            If based on pixel coordinates, you must indicate
+            - the row/col coordinades of
+                    the north-west corner (deb_row,deb_col)
+            - the row/col coordinades of
+                    the south-east corner (end_row,end_col)
+            in a tuple  `area = ((deb_row,end_row),(deb_col,end_col))`
+
+            If based on latitude/longitude coordinates, you must indicate
+            - the lat/lon coordinades of the north-west corner (lat1,lon1)
+            - the lat/lon coordinades of the south-east corner (lat2,lon2)
+            `area = ((lon1,lon2),(lat1,lat2))`
+        If not provide, read the entire image
+    extent : str, optional
+        if `area` is given, precise if the coordinates
+        are in pixels (extent = "pixel", default)
+        or latitude/longitude (extent = "latlon")
+    history : bool, optional
+        Whether to track modification history for the image.
+        Default is False.
+    data : numpy.ndarray, optional
+        Image data to initialize the object with.
+        Must be provided with `meta`.
+        Shape should be (bands, rows, cols).
+    meta : dict, optional
+        Metadata dictionary containing rasterio
+        metadata fields (e.g., crs, transform).
+        Required if `data` is provided.
+    georef : bool, optional
+        Whether the image is georeferenced.
+        If None, will be determined from metadata.
+    target_crs : str, optional
+        Target coordinate reference system
+        if reprojection is needed during loading.
+        Default is "EPSG:4326".
+
+    Attributes
+    ----------
+    image : numpy.ndarray
+        The image data array with shape (bands, rows, cols).
+    shape : tuple
+        The dimensions of the image as (rows, cols).
+    nb_bands : int
+        The number of spectral bands in the image.
+    resolution : float
+        The spatial resolution of the image (pixel size in map units).
+    names : dict
+        Dictionary mapping band names to band indices.
+    nodata : float or int
+        Value used to represent no data or invalid pixels.
+
+    Examples
+    --------
+    >>> # Read only meta information
+    >>> img = rastereasy.open("landsat_image.tif",meta_only=True)
+    >>> img.info()
+    >>>
+    >>> # Read an entire Geoimage from a file
+    >>> img = rastereasy.open("landsat_image.tif")
+    >>> img.info()
+    >>>
+    >>> # Read a window of a file from pixel coordinates
+    >>> You must indicate
+    >>>      - the row/col coordinades of
+    >>>            the north-west corner (deb_row,deb_col)
+    >>>      - the row/col coordinades of
+    >>>            the south-east corner (end_row,end_col)
+    >>> in a tuple  `((deb_row,end_row),(deb_col,end_col))`
+    >>> img = rastereasy.open("landsat_image.tif", area=((200,500),(240,600)))
+    >>> img.info()
+    >>>
+    >>> # Read a window of a file from lat/lon coordinates (parameter extent='latlon')
+    >>> You must indicate
+    >>>      - the lat/lon coordinades of the north-west corner (lat1,lon1)
+    >>>      - the lat/lon coordinades of the south-east corner (lat2,lon2)
+    >>> in a tuple  `((lon1,lon2),(lat1,lat2))`
+    >>> img = rastereasy.open("landsat_image.tif", area=((38.36,38.41),(7.06,7.02)),extent='latlon'))
+    >>> img.info()
+    >>>
+    >>> # Create a Geoimage from a NumPy array with metadata
+    >>> meta = {'driver': 'GTiff', 'width': 100, 'height': 100, 'count': 3,
+    >>> ...         'crs': CRS.from_epsg(4326), 'transform': Affine(0.1, 0, 0, 0, -0.1, 0)}
+    >>> data = np.zeros((3, 100, 100))
+    >>> img = rastereasy.open(data=data, meta=meta)
+    >>>
+    >>> # Create a Geoimage with custom band names
+    >>> img = rastereasy.open("landsat_image.tif", names={'R': 1, 'G': 2, 'B': 3, 'NIR': 4})
+    >>>
+    >>> # Create a Geoimage with custom band names
+    >>> img = rastereasy.open("landsat_image.tif", names={'R': 1, 'G': 2, 'B': 3, 'NIR': 4})
+
+    """
+    return Geoimage(filename, *args, **kwargs)    
 
 
 def read_geoim(source_name, read_image=True, channel_first=True):
@@ -2030,7 +2142,7 @@ def extend_common_areas(image1, image2, nodata_value=0, resolution='min', projec
         Geoimage(data=im2_extend, meta=new_meta, names=image2.names)
     )
 
-def colorcomp(image, bands, name_save='', names=None, percentile=2, channel_first=True,
+def colorcomp(image, bands, name_save='', names=None, percentile=0.5, channel_first=True,
               meta=None, fig_size=DEF_FIG_SIZE, title='', extent=None):
     """
     Create a color composite visualization from a multi-band image.
@@ -2056,7 +2168,7 @@ def colorcomp(image, bands, name_save='', names=None, percentile=2, channel_firs
         Default is None.
     percentile : int, optional
         Percentile value for contrast stretching (e.g., 2 for a 2-98% stretch).
-        Default is 2.
+        Default is 0.5
     channel_first : bool, optional
         Whether input image has shape (bands, rows, cols). If False, assumes
         shape (rows, cols, bands).
@@ -3354,6 +3466,7 @@ class Geoimage:
                       meta=meta, names=names,
                       georef=self.__georef)
 
+    
     def where(self, condition, value1, value2):
         """
         Select values based on a condition, similar to numpy.where().
@@ -4724,7 +4837,7 @@ class Geoimage:
                     band_indices = [self.names[band] - 1 for band in bands]
                     show_hist(data[band_indices, :, :], **args)
 
-    def colorcomp(self, bands=None, dest_name='', percentile=2, fig_size=DEF_FIG_SIZE, title='', extent="latlon", zoom=None, pixel=True):
+    def colorcomp(self, bands=None, dest_name='', percentile=0.5, fig_size=DEF_FIG_SIZE, title='', extent="latlon", zoom=None, pixel=True):
         """
         Create and display a color composite image from selected bands.
 
@@ -4747,7 +4860,7 @@ class Geoimage:
         percentile : int, optional
             Percentile value for contrast stretching (e.g., 2 for a 2-98% stretch).
             This enhances the visual contrast of the image.
-            Default is 2.
+            Default is 0.5
 
         fig_size : tuple, optional
             Size of the figure in inches as (width, height).
@@ -10212,7 +10325,7 @@ class Geoimage:
         - For large images, filtering may require significant memory.
         """
 
-        blurred_image = apply_filter(self.numpy_channel_last().astype(np.float64), kernel)
+        blurred_image = apply_filter(self.numpy_channel_last().astype(np.float64), kernel, method='fft')
         if inplace:
             self.upload_image(blurred_image,channel_first=False, inplace = True, names=self.get_names())
             if dest_name is not None:
@@ -10716,3 +10829,60 @@ class Geoimage:
                 lle.__listhistory.append(f'\t Saved to: {dest_name}')
 
         return lle, (lle_model, scaler)
+
+    def clip(self, vmin, vmax, inplace=False):
+        """
+        Clip (truncate) the pixel values of the image to a given range.
+    
+        Values lower than `vmin` are replaced with `vmin`, and values greater
+        than `vmax` are replaced with `vmax`. The operation can be applied
+        either in place or on a copy of the current image.
+    
+        Parameters
+        ----------
+        vmin : float or int
+            Minimum allowed value. All pixels below this threshold are set to `vmin`.
+    
+        vmax : float or int
+            Maximum allowed value. All pixels above this threshold are set to `vmax`.
+    
+        inplace : bool, default=False
+            If True, modifies the current Geoimage instance and returns it.
+            If False, returns a new clipped Geoimage.
+    
+        Returns
+        -------
+        Geoimage
+            The clipped Geoimage. Returns the same instance if `inplace=True`,
+            otherwise a new copy.
+    
+        Notes
+        -----
+        - The clipping operation is applied independently on all bands.
+        - History is updated if enabled.
+    
+        Examples
+        --------
+        >>> # Clip all values to the range [0, 1000]
+        >>> im2 = im.clip(0, 1000)
+    
+        >>> # Clip in place
+        >>> im.clip(0, 255, inplace=True)
+        """
+        if inplace:
+            self.image = np.where(self.image<vmin,vmin,self.image)
+            self.image = np.where(self.image>vmax,vmax,self.image)
+            if self.__history is not False:
+                now = datetime.datetime.now()
+                now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+                self.__listhistory.append(f'[{now_str}] - clip between {vmin} and {vmax} ')
+            return self
+        else:
+            im = self.copy()
+            im=im.where(im<vmin,vmin,im)
+            im=im.where(im>vmax,vmax,im)
+            if im.__history is not False:
+                now = datetime.datetime.now()
+                now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+                im.__listhistory.append(f'[{now_str}] - clip between {vmin} and {vmax} ')
+            return im
