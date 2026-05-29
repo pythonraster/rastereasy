@@ -23,8 +23,8 @@ import matplotlib
 from matplotlib.widgets import Button
 import ipywidgets as widgets
 import warnings
-if os.environ.get('DISPLAY', '') == '':
-    matplotlib.use('agg')
+#if os.environ.get('DISPLAY', '') == '':
+#    matplotlib.use('agg')
 
 from scipy import ndimage, signal
 import json
@@ -32,6 +32,23 @@ import json
 
 
 
+def get_environment():
+    """Détecte l'environnement d'exécution de manière sécurisée."""
+    try:
+        from IPython import get_ipython
+        shell = get_ipython().__class__.__name__
+        if shell == 'ZMQInteractiveShell':
+            import sys
+            if 'google.colab' in sys.modules:
+                return 'colab'
+            return 'jupyter'
+        elif shell == 'TerminalInteractiveShell':
+            return 'terminal'
+        else:
+            return 'other'
+    except NameError:
+        return 'script' # Script Python standard
+        
 def parse_rdc_meta(rdc_path):
     """Reads the .rdc file and returns a dictionary of metadata."""
     with open(rdc_path, 'r') as file:
@@ -1224,8 +1241,6 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 import sys
 
-# You will need to install a library for the Qt backend.
-# In your terminal: pip install pyqt5
 
 def is_notebook():
     """Checks if the code is running in a Jupyter-like environment."""
@@ -1252,21 +1267,16 @@ class SpectraCollector:
         # --- Backend Configuration ---
         # Force an interactive backend if not in a notebook.
         # Jupyter's 'widget' backend must be enabled beforehand with %matplotlib widget.
-        if is_notebook():
-            ipython = get_ipython()
-            ipython.run_line_magic('matplotlib', 'inline')
-            ipython.run_line_magic('matplotlib', 'widget')
-        else:
-            plt.ion()  # Interactive mode for the standard shell
+        if False:
+            if is_notebook():
+                ipython = get_ipython()
+                ipython.run_line_magic('matplotlib', 'inline')
+                ipython.run_line_magic('matplotlib', 'widget')
+            else:
+                plt.ion()  # Interactive mode for the standard shell
 
         plt.close('all')
 
-        if not is_notebook():
-            try:
-                matplotlib.use('Qt5Agg')
-            except ImportError:
-                print("Warning: PyQt5 is not installed. Interactivity might not work.")
-                print("Please install it with: pip install pyqt5")
 
         # --- Initialize variables ---
         self.im = im
@@ -1350,32 +1360,185 @@ class SpectraCollector:
         """Returns the collected data."""
         return self.series_spectrales, self.val_i, self.val_j, self.end_collect
         
-def plot_clic_spectra2(im, imc, figsize=(15, 5),
-                      plot_legend=False,
-                      names=None,
-                      title_im="Original image (click outside or finish button to stop)",
-                      title_spectra="Spectra",
-                      xlabel="Bands",
-                      ylabel="Value",
-                      callback=None,
-                      offset_i=0,
-                      offset_j = 0):
-    # 'im' and 'imc' are your numpy image arrays
-    collector = SpectraCollector(im, imc,
-                                names=names,
-                                title_im=title_im,
-                                title_spectra=title_spectra,
-                                xlabel=xlabel,
-                                ylabel=ylabel,
-                                plot_legend=plot_legend,
-                                offset_i=offset_i,
-                                offset_j=offset_j)
 
-    spectra, i_coords, j_coords, end_collect = collector.get_data()
 
-    print(f"Collected {len(spectra)} spectra.")
-    return spectra, i_coords, j_coords, end_collect
+def plot_clic_spectra4(im, imc, figsize=(15, 5), plot_legend=False, names=None, 
+                      title_im="Click to collect (Click outside or 'Finish' to stop)",
+                      title_spectra="Spectra", xlabel="Bands", ylabel="Value",
+                      callback=None, offset_i=0, offset_j = 0, colab=False):
+    
+    import matplotlib.pyplot as plt
+    from matplotlib.widgets import Button
+    
+    # 1. On prépare les listes de réception
+    series_spectrales = []
+    val_i = []
+    val_j = []
+    end_collect = False
 
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+    ext = [offset_j, imc.shape[1]+offset_j, imc.shape[0]+offset_i, offset_i]
+    ax1.imshow(imc, extent=ext)
+    ax1.set_title(title_im)
+
+    # Position du bouton Finish
+    ax_finish = plt.axes([0.04, 0.92, 0.1, 0.05])
+    btn_finish = Button(ax_finish, 'Finish')
+
+    def close_figure(event=None):
+        nonlocal end_collect
+        end_collect = True
+        fig.canvas.mpl_disconnect(cid)
+        plt.close(fig)
+        # Petit délai pour laisser Qt fermer la fenêtre proprement avant de continuer
+        plt.pause(0.1) 
+        if callback:
+            callback(series_spectrales, val_i, val_j)
+
+    btn_finish.on_clicked(close_figure)
+
+    def onclick(event):
+        # On utilise nonlocal pour pouvoir modifier les listes parentes
+        nonlocal series_spectrales, val_i, val_j
+        
+        if event.inaxes != ax1:
+            if event.inaxes != ax_finish:
+                close_figure()
+            return
+
+        i, j = int(event.ydata-offset_i), int(event.xdata-offset_j)
+        
+        if 0 <= i < im.shape[0] and 0 <= j < im.shape[1]:
+            val_i.append(i+offset_i)
+            val_j.append(j+offset_j)
+            series_spectrales.append(im[i, j, :])
+
+            ax2.clear()
+            for idx, s in enumerate(series_spectrales):
+                ax2.plot(s, label=f'P{idx}' if plot_legend else None)
+            
+            if names:
+                ax2.set_xticks(range(len(names)))
+                ax2.set_xticklabels(list(names.keys()), rotation=45)
+            
+            ax2.set_title(f"{title_spectra} ({len(series_spectrales)} pts)")
+            fig.canvas.draw_idle()
+
+    cid = fig.canvas.mpl_connect('button_press_event', onclick)
+
+    env = get_environment() # Utilise la fonction de détection qu'on a créée
+
+    if env in ['terminal', 'script']:
+        print("🚀 Interactive window opened. Click 'Finish' or close window to export data.")
+        # BLOQUANT : Le terminal attend ici. 
+        # L'icône Qt restera active tant que la fenêtre n'est pas fermée.
+        plt.show(block=True) 
+    else:
+        plt.show()
+
+    return series_spectrales, val_i, val_j, end_collect
+    
+def plot_clic_spectra3(im, imc, figsize=(15, 5), plot_legend=False, names=None, 
+                      title_im="Click to collect (Click outside or 'Finish' to stop)",
+                      title_spectra="Spectra", xlabel="Bands", ylabel="Value",
+                      callback=None, offset_i=0, offset_j = 0, colab=False):
+    
+    import matplotlib.pyplot as plt
+    from matplotlib.widgets import Button
+    
+    env = get_environment()
+    backend = matplotlib.get_backend()
+
+    # Warning pour Jupyter/Colab si le mauvais backend est actif
+    if env in ['jupyter', 'colab'] and 'ipympl' not in backend.lower() and 'nbagg' not in backend.lower():
+        print("⚠️ Warning: For interactivity, run '%matplotlib widget' in a separate cell.")
+
+    # On utilise un dictionnaire pour stocker les données (évite les problèmes de scope global)
+    state = {
+        'spectra': [],
+        'val_i': [],
+        'val_j': [],
+        'finished': False
+    }
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+    ext = [offset_j, imc.shape[1]+offset_j, imc.shape[0]+offset_i, offset_i]
+    ax1.imshow(imc, extent=ext)
+    ax1.set_title(title_im)
+
+    # Bouton Finish
+    ax_finish = plt.axes([0.04, 0.92, 0.1, 0.05])
+    btn_finish = Button(ax_finish, 'Finish')
+
+    def close_figure(event=None):
+        # 1. On coupe d'abord les ponts avec les clics
+        if cid:
+            fig.canvas.mpl_disconnect(cid)
+        
+        # 2. On marque l'état comme fini
+        results['finished'] = True
+        
+        # 3. ON FERME ET ON VIDE LA FILE D'ATTENTE
+        plt.close(fig)
+        
+        # TRÈS IMPORTANT : On laisse 0.1s au système pour 
+        # digérer la fermeture de la fenêtre avant de continuer le script
+        plt.pause(0.1) 
+        
+        if callback:
+            callback(results['spectra'], results['val_i'], results['val_j'])
+    btn_finish.on_clicked(close_figure)
+
+    def onclick(event):
+        if event.inaxes != ax1:
+            if event.inaxes != ax_finish: # Si on clique vraiment dehors
+                close_figure()
+            return
+
+        i, j = int(event.ydata-offset_i), int(event.xdata-offset_j)
+        
+        # Sécurité limites image
+        if 0 <= i < im.shape[0] and 0 <= j < im.shape[1]:
+            state['val_i'].append(i+offset_i)
+            state['val_j'].append(j+offset_j)
+            state['spectra'].append(im[i, j, :])
+
+            ax2.clear()
+            for idx, s in enumerate(state['spectra']):
+                ax2.plot(s, label=f'P{idx}' if plot_legend else None)
+            
+            if names:
+                ax2.set_xticks(range(len(names)))
+                ax2.set_xticklabels(list(names.keys()), rotation=45)
+            
+            ax2.set_title(f"{title_spectra} ({len(state['spectra'])} pts)")
+            fig.canvas.draw_idle()
+
+
+    # Connexion de l'événement de clic
+    cid = fig.canvas.mpl_connect('button_press_event', onclick)
+
+    env = get_environment()
+
+    if env in ['terminal', 'script']:
+        print("🚀 Interactive window opened.")
+        print("   - Click on the image to pick points.")
+        print("   - Click 'Finish' or outside the image to SAVE and CLOSE.")
+        
+        # Le secret est ICI : block=True force Python à attendre 
+        # que la fenêtre soit fermée proprement avant de faire le "return"
+        plt.show(block=True) 
+    else:
+        # Mode Notebook : ipympl gère l'asynchronisme
+        from ipywidgets import Label
+        from IPython.display import display
+        display(Label(value="Interactivity active. Click on image to pick spectra."))
+        plt.show()
+
+    # Une fois la fenêtre fermée (en mode bloquant) ou pendant qu'elle tourne (notebook)
+    #return series_spectrales, val_i, val_j, results.get('finished', False)
+    return state['spectra'], state['val_i'], state['val_j'], state['finished']
+    
 def plot_clic_spectra(im, imc, figsize=(15, 5),
                       plot_legend=False,
                       names=None,
@@ -1387,17 +1550,30 @@ def plot_clic_spectra(im, imc, figsize=(15, 5),
                       offset_i=0,
                       offset_j = 0,
                       colab=False):
+    if False:
+        if is_notebook():
+            ipython = get_ipython()
+            ipython.run_line_magic('matplotlib', 'inline')
+            ipython.run_line_magic('matplotlib', 'widget')
+        else:
+            plt.ion()  # Interactive mode for the standard shell
+            if colab is False:
+                matplotlib.use('Qt5Agg')
+            else:
+                ipython = get_ipython()
+                ipython.run_line_magic('matplotlib', 'widget')
     if is_notebook():
         ipython = get_ipython()
         ipython.run_line_magic('matplotlib', 'inline')
         ipython.run_line_magic('matplotlib', 'widget')
     else:
         plt.ion()  # Interactive mode for the standard shell
-        if colab is False:
-            matplotlib.use('Qt5Agg')
-        else:
+        if colab is True:
+#            matplotlib.use('Qt5Agg')
+#        else:
             ipython = get_ipython()
             ipython.run_line_magic('matplotlib', 'widget')
+            
             
     plt.close('all')
 
@@ -1425,7 +1601,11 @@ def plot_clic_spectra(im, imc, figsize=(15, 5),
         # Call the callback if provided
         if callback:
             callback(series_spectrales, val_i, val_j)
-        reset_matplotlib()
+        #reset_matplotlib()
+        if get_environment() in ['terminal', 'script', 'other']:
+            plt.show(block=True)    # Return the data after the figure is closed
+
+    
     close_button.on_clicked(close_figure)
 
     def onclick(event):
@@ -1461,6 +1641,18 @@ def plot_clic_spectra(im, imc, figsize=(15, 5),
         fig.canvas.draw()
 
     # Connect the click event
+
+    try:
+        # Désactive les modes de navigation qui "volent" le clic
+        if fig.canvas.toolbar is not None:
+            fig.canvas.toolbar.zoom() # Toggle off if on
+            fig.canvas.toolbar.pan()  # Toggle off if on
+            # Pour certains backends, on force le mode 'None'
+            fig.canvas.toolbar.mode = '' 
+    except:
+        pass
+        
+    
     cid = fig.canvas.mpl_connect('button_press_event', onclick)
 
     # Add a widget to indicate that a click is expected
@@ -1469,9 +1661,42 @@ def plot_clic_spectra(im, imc, figsize=(15, 5),
 
     # Display the figure and allow the user to click
     plt.show()
-    # Return the data after the figure is closed
     return series_spectrales, val_i, val_j,end_collect
-
+    
+def create_band_mapping(bands_list):
+    # Étape 1 : Compter les occurrences totales manuellement
+    total_counts = {}
+    for name in bands_list:
+        if name in total_counts:
+            total_counts[name] += 1
+        else:
+            total_counts[name] = 1
+    
+    # Étape 2 : Construire le dictionnaire final
+    result = {}
+    current_counts = {} # Pour suivre l'avancement (ex: le 1er R, le 2ème R...)
+    
+    # enumerate(..., 1) pour avoir l'index qui commence à 1
+    for i, name in enumerate(bands_list, 1):
+        
+        # Si le nom apparaît plus d'une fois au total dans la liste
+        if total_counts[name] > 1:
+            # On incrémente le compteur courant pour ce nom spécifique
+            if name in current_counts:
+                current_counts[name] += 1
+            else:
+                current_counts[name] = 1
+            
+            # On formate avec le numéro courant : "Nom(1)", "Nom(2)"...
+            new_name = f"{name}({current_counts[name]})"
+            result[new_name] = i
+            
+        else:
+            # S'il est unique, on garde le nom tel quel
+            result[name] = i
+            
+    return result
+    
 def dict_keys_to_list(d):
     """
     Convert dictionary keys to a list of strings.

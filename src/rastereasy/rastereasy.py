@@ -14,13 +14,13 @@ try:
     if IN_COLAB:
         from google.colab import output
         output.enable_custom_widget_manager()
-        from google.colab import drive
-        drive.mount('/content/drive')
+#        from google.colab import drive
+#        drive.mount('/content/drive')
         os.system('pip install rasterio')
         os.system('pip install ipympl')
 except ImportError:
     IN_COLAB = False
-    matplotlib.use('Qt5Agg') #  'Qt5Agg' 'TkAgg'
+    #matplotlib.use('Qt5Agg') #  'Qt5Agg' 'TkAgg'
 end_collect = False  # Flag used for collecting spectra
 
 # Standard library imports
@@ -49,7 +49,9 @@ from rasterio.transform import from_bounds
 
 # Geopandas for vector operations
 import geopandas as gpd
-
+import folium
+import branca.colormap as bcm
+import matplotlib.colors as mcolors
 # Local imports with relative path
 from .utils import *
 from scipy.ndimage import (
@@ -61,9 +63,9 @@ from scipy.ndimage import (
 # Configure warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 # Configure matplotlib backend based on environment
-if os.environ.get('DISPLAY', '') == '':
+#if os.environ.get('DISPLAY', '') == '':
     # Use 'agg' if no GUI is detected
-    matplotlib.use('agg')
+    #matplotlib.use('agg')
 #else:
     # Use 'tkagg' for standard interactive display (commented out in original)
 #    matplotlib.use('tkagg')
@@ -187,7 +189,7 @@ def open(filename, *args, **kwargs):
     >>> img = rastereasy.open("landsat_image.tif", names={'R': 1, 'G': 2, 'B': 3, 'NIR': 4})
 
     """
-    return Geoimage(filename, *args, **kwargs)    
+    return Geoimage(filename, *args, **kwargs)
 
 
 def read_geoim(source_name, read_image=True, channel_first=True):
@@ -450,7 +452,7 @@ def im2tiles(source_name, dest_name, nb_row, nb_col, overlap=0, type_name='seque
             os.system(comm)
             os.makedirs(dest_name)
             print('remove folder ', dest_name)
-        
+
 
     # Process the image
     split_image_to_tiles(
@@ -1464,6 +1466,386 @@ class Visualizer:
 
         return series, val_i, val_j
 
+    @staticmethod
+    def interactive_visualizer2(geo_im, bands=None, percentile=2, opacity=0.8,
+                               background='map', title='',
+                               tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                               colormap='viridis'): # <--- Nouveau paramètre (par défaut 'viridis')
+        """
+        Visualize Geoimage with RGB composite (if 3 bands) or Colormap (if 1 band).
+
+        Parameters included:
+        colormap : str, optional
+            Name of the matplotlib colormap to use if only ONE band is selected.
+            Examples: 'viridis', 'magma', 'jet', 'RdYlGn', 'gray'.
+            Default is 'viridis'.
+        """
+
+        # --- 1. Gestion des bandes ---
+        if bands is None:
+            bands = list(geo_im.names.keys())[:3]
+
+        # Si l'utilisateur donne une seule bande (str ou int), on s'assure que c'est une liste
+        if not isinstance(bands, list):
+            bands = [bands]
+
+        band_indices = []
+        # Conversion des noms en indices (logique existante)
+        # Note: Assurez-vous d'avoir votre fonction `numpy_to_string_list` dispo ou supprimez la ligne si bands est déjà une liste de str
+        # bands = numpy_to_string_list(bands)
+        for b in bands:
+            if b in geo_im.names:
+                band_indices.append(geo_im.names[b])
+            else:
+                band_indices.append(int(b))
+
+        # --- 2. Préparation Données & Métadonnées ---
+        src_data = geo_im.image
+        src_meta = geo_im._Geoimage__meta.copy()
+
+        if src_data.shape[0] != src_meta['count']:
+            src_data = np.moveaxis(src_data, -1, 0)
+
+        height, width = src_meta['height'], src_meta['width']
+        src_crs, src_transform = src_meta['crs'], src_meta['transform']
+        left, bottom, right, top = array_bounds(height, width, src_transform)
+
+        # --- 3. Setup Reprojection (EPSG:4326) ---
+        dst_crs = 'EPSG:4326'
+        transform, dst_width, dst_height = calculate_default_transform(
+            src_crs, dst_crs, width, height, left=left, bottom=bottom, right=right, top=top
+        )
+
+        # --- 4. Traitement de l'image (Logique modifiée ici) ---
+
+        # CAS A : UNE SEULE BANDE -> Utilisation de la Colormap Matplotlib
+        if len(band_indices) == 1:
+            # 1. Extraction et Normalisation
+            source_band = src_data[band_indices[0] - 1]
+            band_norm = normalize(source_band, percentile) # Retourne du uint8 (0-255)
+
+            # 2. Reprojection de la bande unique (en gris pour l'instant)
+            band_reproj = np.zeros((dst_height, dst_width), dtype=np.uint8)
+            reproject(
+                source=band_norm,
+                destination=band_reproj,
+                src_transform=src_transform,
+                src_crs=src_crs,
+                dst_transform=transform,
+                dst_crs=dst_crs,
+                resampling=Resampling.nearest
+            )
+
+            # 3. Application de la Colormap
+            # Matplotlib attend des valeurs entre 0 et 1. On divise par 255.
+            cmap = plt.get_cmap(colormap)
+            # cmap retourne (H, W, 4) en float (RGBA)
+            colored_float = cmap(band_reproj / 255.0)
+
+            # 4. Conversion en (H, W, 3) uint8 pour Folium (on jette le canal Alpha pour l'instant)
+            img_display = (colored_float[:, :, :3] * 255).astype(np.uint8)
+
+        # CAS B : PLUSIEURS BANDES (RGB) -> Logique existante
+        else:
+            # On limite à 3 bandes max pour l'affichage RGB
+            use_indices = band_indices[:3]
+            img_rgb_reproj = np.zeros((3, dst_height, dst_width), dtype=np.uint8)
+
+            for i, band_idx in enumerate(use_indices):
+                source_band = src_data[band_idx - 1]
+                band_norm = normalize(source_band, percentile)
+                reproject(
+                    source=band_norm,
+                    destination=img_rgb_reproj[i],
+                    src_transform=src_transform,
+                    src_crs=src_crs,
+                    dst_transform=transform,
+                    dst_crs=dst_crs,
+                    resampling=Resampling.nearest
+                )
+            # Transposition (3, H, W) -> (H, W, 3)
+            img_display = np.moveaxis(img_rgb_reproj, 0, -1)
+
+        # --- 5. Affichage Carte ---
+        min_lon, min_lat, max_lon, max_lat = array_bounds(dst_height, dst_width, transform)
+        folium_bounds = [[min_lat, min_lon], [max_lat, max_lon]]
+        center = [(min_lat + max_lat) / 2, (min_lon + max_lon) / 2]
+
+        m = folium.Map(location=center, zoom_start=12, tiles=None)
+
+        # Fonds de carte
+        layer_plan = folium.TileLayer('OpenStreetMap', name='Map (OSM)', control=True, show=(background == 'map'))
+        layer_plan.add_to(m)
+
+        layer_sat = folium.TileLayer(tiles=tiles, attr='Esri', name='Satellite', control=True, show=(background == 'satellite'))
+        layer_sat.add_to(m)
+
+        # Titre de la couche
+        if title == '':
+            if len(band_indices) == 1:
+                name = f"Band: {bands[0]} ({colormap})"
+            else:
+                name = f"Data: {bands}"
+        else:
+            name = title
+
+        # Overlay
+        folium.raster_layers.ImageOverlay(
+            image=img_display,
+            bounds=folium_bounds,
+            opacity=opacity,
+            name=name,
+            interactive=True,
+            zindex=1
+        ).add_to(m)
+
+        folium.LayerControl(collapsed=False).add_to(m)
+
+        display(m)
+        return m
+
+    @staticmethod
+    def interactive_visualizer(geo_im, bands=None, percentile=2, opacity=0.8, background='map', title = '', tiles = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', cmap='viridis', colorbar=False, fig_size=DEF_FIG_SIZE):
+        """
+        Create an interactive visualization of the Geoimage with selectable basemaps.
+
+        This function reprojects the requested bands of a Geoimage object to EPSG:4326
+        (Latitude/Longitude) and displays them on an interactive Folium map. It includes
+        a layer control to switch between satellite imagery and a standard map view.
+
+        Parameters
+        ----------
+        geo_im : Geoimage
+            The RasterEasy Geoimage object containing the data and metadata.
+
+        bands : list of str or int, optional
+            List of three band identifiers to use for the RGB composite.
+            Can be band names (e.g., ['R', 'G', 'B']) or indices (e.g., ['4', '3', '2']).
+            If None, the first three bands stored in the image are used.
+            Default is None.
+
+        percentile : int, optional
+            Percentile value for contrast stretching (passed to the normalize function).
+            Default is 2.
+
+        opacity : float, optional
+            Opacity of the image overlay, between 0.0 (transparent) and 1.0 (opaque).
+            Default is 0.8.
+
+        background : {'satellite', 'map'}, optional
+            The default background map to display upon loading:
+            - 'satellite': Aerial imagery (Esri World Imagery).
+            - 'map': OpenStreetMap (roads, cities).
+            Default is 'map'.
+            Note : with 'map' or 'satellite', we need to reproject the image which may take time
+
+        title : str, optional
+            Name of the data in the image
+            Default : name of the bands.
+
+        tiles : str (web site), optional
+            Web site for plotting tiles
+            default is 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+
+        Returns
+        -------
+        folium.Map
+            An interactive Folium map object containing the reprojected image overlay
+            and layer controls.
+
+        Examples
+        --------
+        >>> # Visualize standard RGB with satellite background
+        >>> m = interactive_visualizer(my_image, bands=['R', 'G', 'B'])
+        >>> m
+        """
+
+        if background is not None:
+            if background!='map' and background!='satellite':
+                raise ValueError("Background should either be None, 'map' or 'satellite'. Here {background} is not recognized.")
+
+
+
+        map_width, map_height = '100%', 500
+
+        if fig_size == DEF_FIG_SIZE:
+            map_height=480
+            map_width=780
+            map_height='100%'
+            map_width='100%'
+        else:
+            w_input, h_input = fig_size
+            dpi = 100
+
+            # 1. GESTION LARGEUR
+            if w_input is None:
+                map_width = '100%'
+            elif isinstance(w_input, (int, float)) and w_input < 100:
+                map_width = int(w_input * dpi)
+            else:
+                map_width = w_input
+
+            if isinstance(h_input, (int, float)) and h_input < 100:
+                map_height = int(h_input * dpi)
+            else:
+                map_height = h_input
+
+        legend_object = None
+        if bands is None:
+            bands = list(geo_im.names.keys())[:3]
+
+        band_indices = []
+        bands = numpy_to_string_list(bands)
+        for b in bands:
+            if b in geo_im.names:
+                band_indices.append(geo_im.names[b])
+            else:
+                band_indices.append(int(b))
+
+        src_data = geo_im.image
+        # Access private metadata using name mangling to avoid modifying the original class
+        src_meta = geo_im._Geoimage__meta.copy()
+
+        # Ensure data is in (Count, Height, Width) format for Rasterio
+        if src_data.shape[0] != src_meta['count']:
+            src_data = np.moveaxis(src_data, -1, 0)
+
+        height, width = src_meta['height'], src_meta['width']
+        src_crs, src_transform = src_meta['crs'], src_meta['transform']
+
+        # Calculate explicit bounds from the source transform
+        left, bottom, right, top = rio.transform.array_bounds(height, width, src_transform)
+
+        dst_crs = 'EPSG:4326'
+
+        # Calculate the transformation parameters for the destination CRS
+        transform, dst_width, dst_height = calculate_default_transform(
+            src_crs, dst_crs, width, height, left=left, bottom=bottom, right=right, top=top
+        )
+
+
+        if len(band_indices) == 1:
+
+            source_band = src_data[band_indices[0] - 1]
+
+            # ormalisation
+            band_norm = normalize(source_band, percentile)
+
+            # Reprojection
+            band_reproj = np.zeros((dst_height, dst_width), dtype=np.uint8)
+            reproject(
+                source=band_norm,
+                destination=band_reproj,
+                src_transform=src_transform,
+                src_crs=src_crs,
+                dst_transform=transform,
+                dst_crs=dst_crs,
+                resampling=Resampling.nearest
+            )
+
+            matplotlib_cmap = plt.get_cmap(cmap)
+            colored_float = matplotlib_cmap(band_reproj / 255.0)
+            img_display = (colored_float[:, :, :3] * 255).astype(np.uint8)
+
+            if colorbar:
+                valid_pixels = source_band[source_band != geo_im.nodata] # On ignore le NoData (souvent 0)
+
+                if valid_pixels.size > 0:
+                    if percentile == 0:
+                        vmin, vmax = np.nanmin(valid_pixels), np.nanmax(valid_pixels)
+                    else:
+                        vmin, vmax = np.nanpercentile(valid_pixels, [percentile, 100 - percentile])
+                else:
+                    vmin, vmax = 0, 1
+                vmin = float(vmin)
+                vmax = float(vmax)
+                steps = 20
+                color_list = [mcolors.to_hex(matplotlib_cmap(i / steps)) for i in range(steps + 1)]
+
+                legend_object = bcm.LinearColormap(
+                    colors=color_list,
+                    vmin=vmin,
+                    vmax=vmax,
+                    caption=f"Band: {bands[0]} (Values)"
+                )
+
+        # CAS B : PLUSIEURS BANDES (RGB) -> Logique existante
+        else:
+
+            # Create an empty array for the reprojected RGB image (3 channels)
+            img_rgb_reproj = np.zeros((3, dst_height, dst_width), dtype=np.uint8)
+
+            for i, band_idx in enumerate(band_indices):
+                # Extract source band (adjusting for 1-based indexing)
+                source_band = src_data[band_idx - 1]
+
+                # Normalize the band using the provided percentile
+                band_norm = normalize(source_band, percentile)
+
+                # Reproject the normalized band
+                reproject(
+                    source=band_norm,
+                    destination=img_rgb_reproj[i],
+                    src_transform=src_transform,
+                    src_crs=src_crs,
+                    dst_transform=transform,
+                    dst_crs=dst_crs,
+                    resampling=Resampling.nearest
+                )
+
+            # Transpose to (Height, Width, Channels) for display
+            img_display = np.moveaxis(img_rgb_reproj, 0, -1)
+
+        # Calculate exact Lat/Lon bounds for correct placement on the map
+        min_lon, min_lat, max_lon, max_lat = rio.transform.array_bounds(dst_height, dst_width, transform)
+        folium_bounds = [[min_lat, min_lon], [max_lat, max_lon]]
+        center = [(min_lat + max_lat) / 2, (min_lon + max_lon) / 2]
+
+        # --- 6. Basemap and Layer Management ---
+
+        # Initialize the map
+        m = folium.Map(location=center, zoom_start=12, tiles=None,width=map_width,height=map_height)
+
+        # Option A: "Plan" Layer (OpenStreetMap)
+        layer_plan = folium.TileLayer(
+            'OpenStreetMap',
+            name='Map (OSM)',
+            control=True,
+            show=(background == 'map')
+        )
+        layer_plan.add_to(m)
+
+        # Option B: "Satellite" Layer (Esri World Imagery)
+        layer_sat = folium.TileLayer(
+            tiles=tiles,
+            attr='Esri',
+            name='Satellite',
+            control=True,
+            show=(background == 'satellite')
+        )
+        layer_sat.add_to(m)
+        if title=='':
+            name=f"Data: {bands}"
+        else:
+            name=title
+        # Add the custom image overlay
+        folium.raster_layers.ImageOverlay(
+            image=img_display,
+            bounds=folium_bounds,
+            opacity=opacity,
+            name=name,
+            interactive=True,
+            zindex=1
+        ).add_to(m)
+
+        # Add layer control to toggle between backgrounds
+        if colorbar and legend_object is not None:
+            legend_object.add_to(m)
+
+        folium.LayerControl(collapsed=False).add_to(m)
+        display(m)
+        return m
+
 
 class InferenceTools:
     """
@@ -1756,7 +2138,7 @@ class InferenceTools:
         except Exception as e:
             raise RuntimeError(f"Error during spectral adaptation: {str(e)}") from e
 
-def files2stack(imagefile_path, resolution=None, names="origin", dest_name=None, ext='jp2', history=False):
+def files2stack(imagefile_path, resolution=None, names="origin", dest_name=None, ext='jp2',  history=False, area=None, extent='pixel'):
     """
     Create a stacked Geoimage from multiple single-band images.
 
@@ -1769,22 +2151,47 @@ def files2stack(imagefile_path, resolution=None, names="origin", dest_name=None,
     imagefile_path : str or list of str
         - If a list of strings: paths to image files to stack (e.g., ['image1.jp2', 'image2.jp2', ...])
         - If a string: path to a directory containing images with the specified extension
+
     resolution : float, optional
         Resolution to which all images will be resampled. If None, all images must
         have the same resolution already.
         Default is None.
+
     names : dict or str, optional
         How to name the spectral bands in the stack:
         - If a dict: Maps band names to indices (e.g., {'B': 1, 'G': 2, 'R': 3, ...})
         - If "origin" (default): Uses the original filenames as band names
         - If None: Assigns numeric names ('1', '2', '3', ...)
         Default is "origin".
+
     dest_name : str, optional
         Path to save the stacked image as a TIFF file.
         Default is None (no file saved).
+
     ext : str, optional
         File extension of images to load if imagefile_path is a directory.
         Default is 'jp2'.
+
+    area : tuple, optional
+        To read  only a window of the image
+            If based on pixel coordinates, you must indicate
+            - the row/col coordinades of
+                    the north-west corner (deb_row,deb_col)
+            - the row/col coordinades of
+                    the south-east corner (end_row,end_col)
+            in a tuple  `area = ((deb_row,end_row),(deb_col,end_col))`
+
+            If based on latitude/longitude coordinates, you must indicate
+            - the lat/lon coordinades of the north-west corner (lat1,lon1)
+            - the lat/lon coordinades of the south-east corner (lat2,lon2)
+            `area = ((lon1,lon2),(lat1,lat2))`
+        If not provide, read the entire image
+
+    extent : str, optional
+        if `area` is given, precise if the coordinates
+        are in pixels (extent = "pixel", default)
+        or latitude/longitude (extent = "latlon")
+
     history : bool, optional
         Whether to enable history tracking for the output Geoimage.
         Default is False.
@@ -1805,6 +2212,16 @@ def files2stack(imagefile_path, resolution=None, names="origin", dest_name=None,
     >>> folder_path = './my_bands_folder'
     >>> stacked_image = files2stack(folder_path, resolution=10)
     >>> stacked_image.info()
+    >>>
+    >>> # Stack all jp2 files from a directory with a given area in pixels
+    >>> folder_path = './my_bands_folder'
+    >>> stacked_image = files2stack(folder_path, area=((200,500),(240,600)))
+    >>> stacked_image.info()
+    >>>
+    >>> # Stack all tif files from a directory with a given area in lat/lon
+    >>> folder_path = './my_bands_folder'
+    >>> stacked_image = files2stack(folder_path, area=((38.36,38.41),(7.06,7.02)),extent='latlon', ext='.tif')
+    >>> stacked_image.info()
 
     Notes
     -----
@@ -1823,14 +2240,14 @@ def files2stack(imagefile_path, resolution=None, names="origin", dest_name=None,
     # Case 1: No resampling needed (all images must have same resolution)
     if resolution is None:
         # Initialize with first image
-        im = Geoimage(imagefile_path[0])
+        im = Geoimage(imagefile_path[0], area = area, extent = extent)
         if im.nb_bands!=1:
             message="im %s has %d bands"%(imagefile_path[0],im.nb_bands)
             warnings.warn(message,category=UserWarning)
 
         # Stack remaining images
         for i in range(len(imagefile_path) - 1):
-            ims=Geoimage(imagefile_path[i + 1])
+            ims=Geoimage(imagefile_path[i + 1], area = area, extent = extent)
             if ims.nb_bands!=1:
                 message="im %s has %d bands"%(imagefile_path[i + 1],ims.nb_bands)
                 warnings.warn(message,category=UserWarning)
@@ -1869,7 +2286,7 @@ def files2stack(imagefile_path, resolution=None, names="origin", dest_name=None,
     # Case 2: Resampling required
     else:
         # Initialize with first image (resampled)
-        im = Geoimage(imagefile_path[0])
+        im = Geoimage(imagefile_path[0], area = area, extent = extent)
         if im.nb_bands!=1:
             message="im %s has %d bands"%(imagefile_path[0],im.nb_bands)
             warnings.warn(message,category=UserWarning)
@@ -1879,7 +2296,7 @@ def files2stack(imagefile_path, resolution=None, names="origin", dest_name=None,
         # Process remaining images
         for i in range(len(imagefile_path) - 1):
             # Load and resample next image
-            im_tmpo = Geoimage(imagefile_path[i + 1])
+            im_tmpo = Geoimage(imagefile_path[i + 1], area = area, extent = extent)
             if im_tmpo.resolution != resolution:
                 im_tmpo.resample(resolution, inplace=True)
 
@@ -3466,7 +3883,7 @@ class Geoimage:
                       meta=meta, names=names,
                       georef=self.__georef)
 
-    
+
     def where(self, condition, value1, value2):
         """
         Select values based on a condition, similar to numpy.where().
@@ -4837,7 +5254,7 @@ class Geoimage:
                     band_indices = [self.names[band] - 1 for band in bands]
                     show_hist(data[band_indices, :, :], **args)
 
-    def colorcomp(self, bands=None, dest_name='', percentile=0.5, fig_size=DEF_FIG_SIZE, title='', extent="latlon", zoom=None, pixel=True):
+    def colorcomp(self, bands=None, dest_name='', percentile=0.5, fig_size=DEF_FIG_SIZE, title='', extent="latlon", zoom=None, pixel=True, opacity = 0.8, background=None, tiles = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'):
         """
         Create and display a color composite image from selected bands.
 
@@ -4870,13 +5287,22 @@ class Geoimage:
             Title for the visualization.
             Default is ''.
 
-        extent : {'latlon', 'pixel', None}, optional
+        background: None or str, optional ('map' or 'satellite')
+            Visualization in interactive mode with a 'map' or a 'satellite' in background
+            Default is None : just an image without background
+            Note : with 'map' or 'satellite', we need to reproject the image which may take time
+
+        opacity : float, optional, useful if background is 'map' or 'satellite'
+            Opacity of the image overlay, between 0.0 (transparent) and 1.0 (opaque).
+            Default is 0.8.
+
+        extent : {'latlon', 'pixel', None}, optional, useful if background is None
             Type of extent to use for the plot:
             - 'latlon': Use latitude/longitude coordinates (default)
             - 'pixel': Use pixel coordinates
             - None: Don't show coordinate axes
 
-        zoom : tuple, optional
+        zoom : tuple, optional, useful if background is None
             To plot  only a window of the image
                 If based on pixel coordinates, you must indicate
                 - the row/col coordinades of
@@ -4891,11 +5317,16 @@ class Geoimage:
                 `zoom = ((lon1,lon2),(lat1,lat2))`
             If not provide, perform on the entire image
 
-        pixel : bool, optional
+        pixel : bool, optional, useful if background is None
             Coordinate system flag, if zoom is given:
             - If True: Coordinates are interpreted as pixel indices
             - If False: Coordinates are interpreted as geographic coordinates
             Default is True.
+
+        tiles : str (web site), optional, useful if background is selected
+            Web site for plotting tiles in background mode (satellite or maps)
+            default is 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+
 
         Returns
         -------
@@ -4916,6 +5347,12 @@ class Geoimage:
         >>> # Create a color-infrared composite (vegetation appears red)
         >>> image.colorcomp(bands=["NIR", "R", "G"], title="Color-Infrared Composite")
         >>>
+        >>> # Create a color-infrared composite (vegetation appears red) in interactive mode with a map
+        >>> image.colorcomp(bands=["NIR", "R", "G"], title="Color-Infrared Composite", background='map')
+        >>>
+        >>> # Create a color-infrared composite (vegetation appears red) in interactive mode with a sat image
+        >>> image.colorcomp(bands=["NIR", "R", "G"], title="Color-Infrared Composite", background='satellite')
+        >>>
         >>> # Zoom and save a false color composite
         >>> image.colorcomp(bands=["SWIR1", "NIR", "G"], dest_name="false_color.tif",zoom=((100,300),(200,400)))
         >>>
@@ -4930,53 +5367,69 @@ class Geoimage:
         - Agriculture: SWIR, NIR, B (highlights crop health and soil moisture)
         - Urban: SWIR, NIR, R (emphasizes urban areas and bare soil)
         """
-        # Validate extent parameter
-        if extent == 'pixel':
-            extent_plot = self.__extent_pixels
-        elif extent == 'latlon':
-            extent_plot = self.__extent_latlon
-        elif extent is None:
-            extent_plot = None
+
+        #if self.__meta['count'] == 2:
+        #    raise ValueError("Error: unable to make a color composition with 2 channels. "
+        #                     "Need at least 3 channels for RGB composition. Use .visu() instead")
+
+        if background is not None:
+            if background!='map' and background!='satellite':
+                raise ValueError(f"Background should either be None, 'map' or 'satellite'. Here {background} is not recognized.")
+
+        if bands is None:
+            bands = list(self.names.keys())[:3]
         else:
-            raise ValueError("Invalid extent value. Use 'pixel', 'latlon', or None.")
+            bands = numpy_to_string_list(bands)
+        if len(bands) ==1:
+            bands = [bands[0],bands[0],bands[0]]
+            warnings.warn(
+                "Colorcomp with only one band. Grey level image printed",
+                #DeprecationWarning,
+                stacklevel=1
+            )
+        elif len(bands) ==2:
+            bands = [bands[0],bands[1],bands[0]]
+            warnings.warn(
+                "Colorcomp with only 2 bands. The 1st band is duplicated in the 3rd position",
+                #DeprecationWarning,
+                stacklevel=1
+            )
 
-        # Handle single-band case (grayscale)
-        if self.__meta['count'] == 1:
-            im = normalize(self.image.reshape((self.__meta['height'], self.__meta['width'])), percentile)
+        if background=='satellite' or background=='map':
 
-            fig, ax = plt.subplots(figsize=fig_size)
-            ax.set_title(title)
 
-            if extent_plot is None:
-                ax.imshow(im, interpolation='nearest')
-                plt.axis('off')
+            if zoom is None:
+                imt=extract_colorcomp(self,bands=bands,percentile=percentile)
+                imc=self.upload_image(imt, names=create_band_mapping(bands), channel_first=False)
+#                imc=self.upload_image(imt, names={bands[0]:1,bands[1]:2,bands[2]:3}, channel_first=False)
+                imc.astype(np.uint8, inplace=True)
+                imc.change_nodata(0)
             else:
-                ax.imshow(im, interpolation='nearest', extent=extent_plot)
+                imc=self.crop(area=zoom,pixel=pixel)
+                imt=extract_colorcomp(imc,bands=bands,percentile=percentile)
+                imc.upload_image(imt, names=create_band_mapping(bands), channel_first=False, inplace=True)
+                imc.astype(np.uint8, inplace=True)
+                imc.change_nodata(0)
 
-            plt.show()
 
-            # Save the image if requested
             if dest_name != '':
-                folder = os.path.split(dest_name)[0]
-                if os.path.exists(folder) is False and folder != '':
-                    os.makedirs(folder)
+                imc.save(dest_name)
 
-                if os.path.exists(dest_name):
-                    os.remove(dest_name)
-                if os.path.exists(f'{dest_name}.aux.xml'):
-                    os.remove(f'{dest_name}.aux.xml')
+#            return imc.interactive_visualization(percentile=0, opacity=opacity, background=background, title=title)
+            imc.interactive_visualization(percentile=0, opacity=opacity, background=background, title=title, tiles=tiles)
 
-                with rio.open(dest_name, 'w', **self.__meta) as outds:
-                    outds.write(im.reshape((1, self.__meta['height'], self.__meta['width'])))
-                print(f"Image saved in {dest_name}")
-
-        # Handle two-band case (not enough for RGB)
-        elif self.__meta['count'] == 2:
-            raise ValueError("Error: unable to make a color composition with 2 channels. "
-                           "Need at least 3 channels for RGB composition.")
-
-        # Handle multi-band case (create RGB composite)
         else:
+            # Validate extent parameter
+            if extent == 'pixel':
+                extent_plot = self.__extent_pixels
+            elif extent == 'latlon':
+                extent_plot = self.__extent_latlon
+            elif extent is None:
+                extent_plot = None
+            else:
+                raise ValueError("Invalid extent value. Use 'pixel', 'latlon', or None.")
+
+            # Handle single-band case (grayscale)
             # Use first three bands if none specified
             if bands is None:
                 bands = list(self.names.keys())[:3]
@@ -5213,7 +5666,24 @@ class Geoimage:
         - Training classification algorithms
         - Building spectral libraries
         """
+        env = get_environment()
+        backend = matplotlib.get_backend()
 
+        # --- ENVIRONMENT MANAGEMENT ---
+
+        if env in ['jupyter', 'colab']:
+            # If the backend is not interactive (e.g., 'module://matplotlib_inline.backend_inline')
+            if 'ipympl' not in backend.lower() and 'nbagg' not in backend.lower():
+                print("⚠️ Warning: Interactivity requires a specific Matplotlib backend.")
+                print("Please run '%matplotlib widget' in a separate cell and restart the tool.")
+                # We don't stop execution, but the user is informed why clicking won't work.
+
+        elif env == 'terminal' or env == 'script':
+            # Local execution (PyCharm, VS Code script, Terminal)
+            # Check for non-GUI backend (Agg)
+            if backend.lower() == 'agg':
+                print("⚠️ No GUI backend detected (Current: Agg).")
+                print("Please install a framework like PyQt5 or Tkinter for local interactive plotting.")
 
         if zoom is None:
             return self.__plot_spectra_entire(bands=bands,
@@ -5335,8 +5805,7 @@ class Geoimage:
         )
 
         return series, pixel_i, pixel_j
-
-    def __visu_entire(self, bands=None, title='', percentile=0, fig_size=DEF_FIG_SIZE, cmap=None, colorbar=False, extent='latlon', extent_plot=None):
+    def __visu_entire(self, bands=None, title='', percentile=0, fig_size=DEF_FIG_SIZE, cmap=None, colorbar=False, extent='latlon', extent_plot=None, background = None, tiles = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', opacity=0.8):
         """
         Visualize one or more bands of the image.
 
@@ -5401,75 +5870,97 @@ class Geoimage:
         - Applying different colormaps to highlight specific features
         - Visualizing single-band thematic data (e.g., elevation, classification results)
         """
-        # Validate extent parameter
-        if extent == 'pixel':
-            if extent_plot is not None:
-                extent = extent_plot
-            else:
-                extent = self.__extent_pixels
+        if background is not None:
+            if background!='map' and background!='satellite':
+                raise ValueError(f"Background should either be None, 'map' or 'satellite'. Here {background} is not recognized.")
 
-        elif extent == 'latlon':
-            extent = self.__extent_latlon
-        elif extent is None:
-            extent = None
-        else:
-            raise ValueError("Invalid extent value. Use 'pixel', 'latlon', or None.")
+        if background=='map' or background=='satellite':
+            if bands is None:
+                bands = [name for name in self.names]
 
-        # Reset matplotlib settings
-        reset_matplotlib()
+            bands = numpy_to_string_list(bands)
 
-        # If no bands specified, use all bands
-        if bands is None:
-            bands = [name for name in self.names]
-
-        bands = numpy_to_string_list(bands)
-
-        # Validate that requested bands exist
-        set1 = set(bands)
-        set2 = set(self.names)
-        if not(set1 <= set2):
-            raise ValueError(f"Error: the requested bands ({bands}) are not all "
-                           f"in the available bands ({self.names})")
-
-        # Display a single band
-        if len(bands) == 1:
-            im = get_percentile(self.image[self.names[bands[0]] - 1, :, :], percentile)
-
-            fig, ax = plt.subplots(figsize=fig_size)
-            ax.set_title(title)
-
-            if extent is None:
-                visu = ax.imshow(im, interpolation='nearest', cmap=cmap)
-                if colorbar:
-                    fig.colorbar(visu, ax=ax, shrink=0.8, aspect=10, pad=0.05)
-                plt.axis('off')
-                plt.show()
-            else:
-                visu = ax.imshow(im, interpolation='nearest', cmap=cmap, extent=extent)
-                if colorbar:
-                    fig.colorbar(visu, ax=ax, shrink=0.8, aspect=10, pad=0.05)
-                plt.show()
-
-        # Display multiple bands
-        else:
             for i in range(len(bands)):
-                im = get_percentile(self.image[self.names[bands[i]] - 1, :, :], percentile)
+                Visualizer.interactive_visualizer(
+                    self.select_bands(bands[i]),
+                    bands=None,
+                    percentile=percentile,
+                    opacity=opacity,
+                    background=background,
+                    title=f'{title} band {bands[i]}',
+                    tiles=tiles, cmap=cmap, colorbar=colorbar, fig_size=fig_size)
+
+
+        else:
+            # Validate extent parameter
+            if extent == 'pixel':
+                if extent_plot is not None:
+                    extent = extent_plot
+                else:
+                    extent = self.__extent_pixels
+
+            elif extent == 'latlon':
+                extent = self.__extent_latlon
+            elif extent is None:
+                extent = None
+            else:
+                raise ValueError("Invalid extent value. Use 'pixel', 'latlon', or None.")
+
+            # Reset matplotlib settings
+            reset_matplotlib()
+
+            # If no bands specified, use all bands
+            if bands is None:
+                bands = [name for name in self.names]
+
+            bands = numpy_to_string_list(bands)
+
+            # Validate that requested bands exist
+            set1 = set(bands)
+            set2 = set(self.names)
+            if not(set1 <= set2):
+                raise ValueError(f"Error: the requested bands ({bands}) are not all "
+                               f"in the available bands ({self.names})")
+
+            # Display a single band
+            if len(bands) == 1:
+                im = get_percentile(self.image[self.names[bands[0]] - 1, :, :], percentile)
+
+                fig, ax = plt.subplots(figsize=fig_size)
+                ax.set_title(title)
 
                 if extent is None:
-                    fig, ax = plt.subplots(figsize=fig_size)
-                    ax.set_title(f'{title} band {bands[i]}')
                     visu = ax.imshow(im, interpolation='nearest', cmap=cmap)
                     if colorbar:
                         fig.colorbar(visu, ax=ax, shrink=0.8, aspect=10, pad=0.05)
                     plt.axis('off')
                     plt.show()
                 else:
-                    fig, ax = plt.subplots(figsize=fig_size)
-                    ax.set_title(f'{title} band {bands[i]}')
                     visu = ax.imshow(im, interpolation='nearest', cmap=cmap, extent=extent)
                     if colorbar:
                         fig.colorbar(visu, ax=ax, shrink=0.8, aspect=10, pad=0.05)
                     plt.show()
+
+            # Display multiple bands
+            else:
+                for i in range(len(bands)):
+                    im = get_percentile(self.image[self.names[bands[i]] - 1, :, :], percentile)
+
+                    if extent is None:
+                        fig, ax = plt.subplots(figsize=fig_size)
+                        ax.set_title(f'{title} band {bands[i]}')
+                        visu = ax.imshow(im, interpolation='nearest', cmap=cmap)
+                        if colorbar:
+                            fig.colorbar(visu, ax=ax, shrink=0.8, aspect=10, pad=0.05)
+                        plt.axis('off')
+                        plt.show()
+                    else:
+                        fig, ax = plt.subplots(figsize=fig_size)
+                        ax.set_title(f'{title} band {bands[i]}')
+                        visu = ax.imshow(im, interpolation='nearest', cmap=cmap, extent=extent)
+                        if colorbar:
+                            fig.colorbar(visu, ax=ax, shrink=0.8, aspect=10, pad=0.05)
+                        plt.show()
 
     def __visu_zoom(self, bands=None, title='', percentile=0, fig_size=DEF_FIG_SIZE, cmap=None, colorbar=False, extent='latlon', zoom = None, pixel = True):
         """
@@ -5482,7 +5973,97 @@ class Geoimage:
                 cmap=cmap,
                 colorbar=colorcar,
                 extent=extent)
-    def visu(self, bands=None, title='', percentile=0, fig_size=DEF_FIG_SIZE, cmap=None, colorbar=False, extent='latlon', zoom = None, pixel = True):
+
+    def interactive_visualization(self, bands=None, percentile=0.5, opacity=0.8, background='map', zoom = None, pixel = True, title = '', tiles = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'):
+        """
+        Create an interactive visualization of the Geoimage with selectable basemaps.
+
+        This function reprojects the requested bands of a Geoimage object to EPSG:4326
+        (Latitude/Longitude) and displays them on an interactive Folium map. It includes
+        a layer control to switch between satellite imagery and a standard map view.
+
+        Parameters
+        ----------
+        bands : list of str or int, optional
+            List of three band identifiers to use for the RGB composite.
+            Can be band names (e.g., ['R', 'G', 'B']) or indices (e.g., ['4', '3', '2']).
+            If None, the first three bands stored in the image are used.
+            Default is None.
+        percentile : int, optional
+            Percentile value for contrast stretching (passed to the normalize function).
+            Default is 0.5
+        opacity : float, optional
+            Opacity of the image overlay, between 0.0 (transparent) and 1.0 (opaque).
+            Default is 0.8.
+        background : {'satellite', 'map'}, optional
+            The default background map to display upon loading:
+            - 'satellite': Aerial imagery (Esri World Imagery).
+            - 'map': OpenStreetMap (roads, cities).
+            Default is 'map'.
+        zoom : tuple, optional
+            To visualize  only a window of the image
+                If based on pixel coordinates, you must indicate
+                - the row/col coordinades of
+                        the north-west corner (deb_row,deb_col)
+                - the row/col coordinades of
+                        the south-east corner (end_row,end_col)
+                in a tuple  `zoom = ((deb_row,end_row),(deb_col,end_col))`
+
+                If based on latitude/longitude coordinates, you must indicate
+                - the lat/lon coordinades of the north-west corner (lat1,lon1)
+                - the lat/lon coordinades of the south-east corner (lat2,lon2)
+                `zoom = ((lon1,lon2),(lat1,lat2))`
+            If not provide, visualize the entire image
+        title : str, optional
+            Title of the data in the image
+            Default : name of the bands.
+
+        pixel : bool, optional
+            Coordinate system flag, if zoom is given:
+            - If True: Coordinates are interpreted as pixel indices
+            - If False: Coordinates are interpreted as geographic coordinates
+            Default is True.
+        tiles : str (web site), optional
+            Web site for plotting tiles
+            default is 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+
+        Returns
+        -------
+        folium.Map
+            An interactive Folium map object containing the reprojected image overlay
+            and layer controls.
+
+        Examples
+        --------
+        >>> # Visualize standard RGB with satellite background
+        >>> im.interactive_visualizer(bands=['R', 'G', 'B'])
+        >>> im.interactive_visualizer(bands=['R', 'G', 'B'], zoom=((20,150),(200,500)))
+        >>> im.interactive_visualizer(bands=['SWIR1', 'R', 'NIR'], background='satellite', title='SWIR1,R,NIR')
+
+        """
+
+        if zoom is None:
+            m = Visualizer.interactive_visualizer(self,
+                                                  bands=bands,
+                                                  percentile=percentile,
+                                                  opacity=opacity,
+                                                  background=background,
+                                                  title=title,
+                                                  tiles=tiles)
+        else:
+            im_crop=self.crop(area=zoom, pixel=pixel)
+            m = Visualizer.interactive_visualizer(im_crop,
+                                                  bands=bands,
+                                                  percentile=percentile,
+                                                  opacity=opacity,
+                                                  background=background,
+                                                  title=title,
+                                                  tiles=tiles)
+        return m
+
+
+
+    def visu(self, bands=None, title='', percentile=0, fig_size=DEF_FIG_SIZE, cmap=None, colorbar=False, extent='latlon', zoom = None, pixel = True, background = None, tiles = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',opacity = 0.8):
         """
         Visualize one or more bands of the image.
 
@@ -5511,23 +6092,27 @@ class Geoimage:
             Size of the figure in inches as (width, height).
             Default is DEF_FIG_SIZE.
 
-        cmap : str, optional
-            Matplotlib colormap name to use for display.
-            Examples: 'viridis', 'plasma', 'gray', 'RdYlGn'
-            Default is None (uses matplotlib default).
+        title : str, optional
+            Title for the visualization.
+            Default is ''.
 
-        colorbar : bool, optional
-            Whether to display a colorbar next to each image.
-            Default is False.
+        background: None or str, optional ('map' or 'satellite')
+            Visualization in interactive mode with a 'map' or a 'satellite' in background
+            Default is None : just an image without background
+            Note : with 'map' or 'satellite', we need to reproject the image which may take time
 
-        extent : {'latlon', 'pixel', None}, optional
+        opacity : float, optional, useful if background is 'map' or 'satellite'
+            Opacity of the image overlay, between 0.0 (transparent) and 1.0 (opaque).
+            Default is 0.8.
+
+        extent : {'latlon', 'pixel', None}, optional, useful if background is None
             Type of extent to use for the plot:
             - 'latlon': Use latitude/longitude coordinates (default)
             - 'pixel': Use pixel coordinates
             - None: Don't show coordinate axes
 
-        zoom : tuple, optional
-            To visualize  only a window of the image
+        zoom : tuple, optional, useful if background is None
+            To plot  only a window of the image
                 If based on pixel coordinates, you must indicate
                 - the row/col coordinades of
                         the north-west corner (deb_row,deb_col)
@@ -5539,13 +6124,26 @@ class Geoimage:
                 - the lat/lon coordinades of the north-west corner (lat1,lon1)
                 - the lat/lon coordinades of the south-east corner (lat2,lon2)
                 `zoom = ((lon1,lon2),(lat1,lat2))`
-            If not provide, visualize the entire image
+            If not provide, perform on the entire image
 
-        pixel : bool, optional
+        pixel : bool, optional, useful if background is None
             Coordinate system flag, if zoom is given:
             - If True: Coordinates are interpreted as pixel indices
             - If False: Coordinates are interpreted as geographic coordinates
             Default is True.
+
+        cmap : str, optional
+            Matplotlib colormap name to use for display.
+            Examples: 'viridis', 'plasma', 'gray', 'RdYlGn'
+            Default is None (uses matplotlib default).
+
+        colorbar : bool, optional
+            Whether to display a colorbar next to each image.
+            Default is False.
+
+        tiles : str (web site), optional, useful if background is selected
+            Web site for plotting tiles in background mode (satellite or maps)
+            default is 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
 
 
         Examples
@@ -5555,6 +6153,9 @@ class Geoimage:
         >>>
         >>> # Visualize a single band with a colormap and colorbar
         >>> image.visu("NIR", cmap='plasma', colorbar=True, title="Near Infrared Band")
+        >>>
+        >>> # Visualize a single band with in an interactive way with a map background
+        >>> image.visu("R", title="Near Infrared Band", background='map')
         >>>
         >>> # Visualize selected bands
         >>> image.visu(["Red", "NIR", "NDVI"], fig_size=(10, 8))
@@ -5577,7 +6178,8 @@ class Geoimage:
                                fig_size=fig_size,
                                cmap=cmap,
                                colorbar=colorbar,
-                               extent=extent)
+                               extent=extent,
+                               background=background, tiles=tiles, opacity=opacity)
         else:
             im=self.crop(area=zoom, pixel=pixel)
             if extent=='pixel':
@@ -5592,14 +6194,14 @@ class Geoimage:
                                  fig_size=fig_size,
                                  cmap=cmap,
                                  colorbar=colorbar,
-                                 extent=extent, extent_plot=extent_plot)
+                                 extent=extent, extent_plot=extent_plot, background=background, tiles=tiles, opacity=opacity)
             else:
                 im.__visu_entire(bands=bands,
                                  title=title,
                                  fig_size=fig_size,
                                  cmap=cmap,
                                  colorbar=colorbar,
-                                 extent=extent)
+                                 extent=extent, background=background, tiles=tiles, opacity=opacity)
 
 
 
@@ -6189,7 +6791,7 @@ class Geoimage:
             npdtype = np.dtype(dtype)
             self.image = self.image.astype(npdtype)
             self.__meta['dtype'] = dtype
-    
+
             if self.__history is not False:
                 now = datetime.datetime.now()
                 now_str = now.strftime("%Y-%m-%d %H:%M:%S")
@@ -6199,7 +6801,7 @@ class Geoimage:
             im = self.copy()
             npdtype = np.dtype(dtype)
             im.upload_image(im.numpy_channel_first().astype(npdtype), inplace=True)
-    
+
             if im.__history is not False:
                 now = datetime.datetime.now()
                 now_str = now.strftime("%Y-%m-%d %H:%M:%S")
@@ -10833,39 +11435,39 @@ class Geoimage:
     def clip(self, vmin, vmax, inplace=False):
         """
         Clip (truncate) the pixel values of the image to a given range.
-    
+
         Values lower than `vmin` are replaced with `vmin`, and values greater
         than `vmax` are replaced with `vmax`. The operation can be applied
         either in place or on a copy of the current image.
-    
+
         Parameters
         ----------
         vmin : float or int
             Minimum allowed value. All pixels below this threshold are set to `vmin`.
-    
+
         vmax : float or int
             Maximum allowed value. All pixels above this threshold are set to `vmax`.
-    
+
         inplace : bool, default=False
             If True, modifies the current Geoimage instance and returns it.
             If False, returns a new clipped Geoimage.
-    
+
         Returns
         -------
         Geoimage
             The clipped Geoimage. Returns the same instance if `inplace=True`,
             otherwise a new copy.
-    
+
         Notes
         -----
         - The clipping operation is applied independently on all bands.
         - History is updated if enabled.
-    
+
         Examples
         --------
         >>> # Clip all values to the range [0, 1000]
         >>> im2 = im.clip(0, 1000)
-    
+
         >>> # Clip in place
         >>> im.clip(0, 255, inplace=True)
         """
