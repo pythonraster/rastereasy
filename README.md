@@ -173,6 +173,15 @@ year = {2025}
 This project is licensed under the MIT License – see the [LICENCE](https://github.com/pythonraster/rastereasy/blob/main/LICENCE) file for details.
 
 ## Releases
+
+0.3.7
+-----
+
+- **Add background visualization**: Add a parameter  `background = 'map'` or `background = 'satellite'` in all visualization functions
+- Fix minor warnings
+
+
+
 0.3.6
 -----
 
